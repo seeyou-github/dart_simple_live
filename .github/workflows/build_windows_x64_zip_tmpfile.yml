@@ -1,4 +1,4 @@
-name: build_windows_x64_zip_debug_tmpfile
+name: build_windows_x64_zip_tmpfile
 
 on:
   workflow_dispatch:
@@ -10,7 +10,7 @@ permissions:
   contents: read
 
 jobs:
-  build_windows_x64_zip_debug_tmpfile:
+  build_windows_x64_zip_release_tmpfile:
     runs-on: windows-latest
 
     steps:
@@ -33,21 +33,21 @@ jobs:
           cd simple_live_app
           flutter pub get
 
-      - name: Build Windows x64 debug
+      - name: Build Windows x64 release
         run: |
           cd simple_live_app
-          flutter build windows --debug
+          flutter build windows --release
 
-      - name: Package Windows x64 debug zip
+      - name: Package Windows x64 release zip
         id: package
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          $buildDir = Join-Path $env:GITHUB_WORKSPACE 'simple_live_app\build\windows\x64\runner\Debug'
-          $zipPath = Join-Path $env:GITHUB_WORKSPACE 'simple_live_windows_x64_debug.zip'
+          $buildDir = Join-Path $env:GITHUB_WORKSPACE 'simple_live_app\build\windows\x64\runner\Release'
+          $zipPath = Join-Path $env:GITHUB_WORKSPACE 'simple_live_windows_x64_release.zip'
 
           if (-not (Test-Path -LiteralPath $buildDir -PathType Container)) {
-            throw "Windows debug build output directory not found: $buildDir"
+            throw "Windows release build output directory not found: $buildDir"
           }
 
           if (Test-Path -LiteralPath $zipPath) {
@@ -63,7 +63,7 @@ jobs:
           "zip_path=$zipPath" >> $env:GITHUB_OUTPUT
           "zip_name=$(Split-Path -Path $zipPath -Leaf)" >> $env:GITHUB_OUTPUT
 
-      - name: Upload Windows x64 debug zip to tmpfile.link
+      - name: Upload Windows x64 release zip to tmpfile.link
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
@@ -81,7 +81,7 @@ jobs:
             throw "tmpfile.link upload failed: $response"
           }
 
-          "## Windows x64 debug build" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
+          "## Windows x64 release build" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
           "" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
           "- File: ``$zipName``" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
           "- Download: $($json.downloadLinkEncoded)" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
