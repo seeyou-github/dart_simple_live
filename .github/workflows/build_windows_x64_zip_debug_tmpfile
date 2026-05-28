@@ -1,0 +1,88 @@
+name: build_windows_x64_zip_debug_tmpfile
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - master
+
+permissions:
+  contents: read
+
+jobs:
+  build_windows_x64_zip_debug_tmpfile:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout master
+        uses: actions/checkout@v4
+        with:
+          ref: master
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "3.38.x"
+          cache: true
+
+      - name: Enable Windows desktop
+        run: flutter config --enable-windows-desktop
+
+      - name: Restore packages
+        run: |
+          cd simple_live_app
+          flutter pub get
+
+      - name: Build Windows x64 debug
+        run: |
+          cd simple_live_app
+          flutter build windows --debug
+
+      - name: Package Windows x64 debug zip
+        id: package
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $buildDir = Join-Path $env:GITHUB_WORKSPACE 'simple_live_app\build\windows\x64\runner\Debug'
+          $zipPath = Join-Path $env:GITHUB_WORKSPACE 'simple_live_windows_x64_debug.zip'
+
+          if (-not (Test-Path -LiteralPath $buildDir -PathType Container)) {
+            throw "Windows debug build output directory not found: $buildDir"
+          }
+
+          if (Test-Path -LiteralPath $zipPath) {
+            Remove-Item -LiteralPath $zipPath -Force
+          }
+
+          Compress-Archive -Path (Join-Path $buildDir '*') -DestinationPath $zipPath -Force
+
+          if (-not (Test-Path -LiteralPath $zipPath -PathType Leaf)) {
+            throw "Zip package was not created: $zipPath"
+          }
+
+          "zip_path=$zipPath" >> $env:GITHUB_OUTPUT
+          "zip_name=$(Split-Path -Path $zipPath -Leaf)" >> $env:GITHUB_OUTPUT
+
+      - name: Upload Windows x64 debug zip to tmpfile.link
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $zipPath = '${{ steps.package.outputs.zip_path }}'
+          $zipName = '${{ steps.package.outputs.zip_name }}'
+
+          if (-not (Test-Path -LiteralPath $zipPath -PathType Leaf)) {
+            throw "Upload file not found: $zipPath"
+          }
+
+          $response = curl.exe -sS -X POST -F "file=@$zipPath" https://tmpfile.link/api/upload
+          Write-Host $response
+          $json = $response | ConvertFrom-Json
+          if (-not $json.downloadLinkEncoded) {
+            throw "tmpfile.link upload failed: $response"
+          }
+
+          "## Windows x64 debug build" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
+          "" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
+          "- File: ``$zipName``" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
+          "- Download: $($json.downloadLinkEncoded)" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
+          "- Retention: tmpfile.link anonymous uploads are deleted after 7 days." | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
