@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:crypto/crypto.dart';
 import 'package:simple_live_core/src/common/convert_helper.dart';
+import 'package:simple_live_core/src/common/core_error.dart';
 import 'package:simple_live_core/src/common/http_client.dart';
 import 'package:simple_live_core/src/danmaku/bilibili_danmaku.dart';
 import 'package:simple_live_core/src/interface/live_danmaku.dart';
@@ -62,10 +63,7 @@ class BiliBiliSite implements LiveSite {
     List<LiveCategory> categories = [];
     var result = await HttpClient.instance.getJson(
       "https://api.live.bilibili.com/room/v1/Area/getList",
-      queryParameters: {
-        "need_entrance": 1,
-        "parent_id": 0,
-      },
+      queryParameters: {"need_entrance": 1, "parent_id": 0},
       header: await getHeader(),
     );
     for (var item in result["data"]) {
@@ -90,8 +88,10 @@ class BiliBiliSite implements LiveSite {
   }
 
   @override
-  Future<LiveCategoryResult> getCategoryRooms(LiveSubCategory category,
-      {int page = 1}) async {
+  Future<LiveCategoryResult> getCategoryRooms(
+    LiveSubCategory category, {
+    int page = 1,
+  }) async {
     const baseUrl =
         "https://api.live.bilibili.com/xlive/web-interface/v1/second/getList";
 
@@ -106,14 +106,68 @@ class BiliBiliSite implements LiveSite {
       header: await getHeader(),
     );
 
-    var hasMore = result["data"]["has_more"] == 1;
+    var data = result is Map ? result["data"] : null;
+    if (data is! Map || data["list"] is! List) {
+      return _getCategoryRoomsByArea(
+        category,
+        page: page,
+        previousResponse: result,
+      );
+    }
+    return _parseCategoryResult(data);
+  }
+
+  Future<LiveCategoryResult> _getCategoryRoomsByArea(
+    LiveSubCategory category, {
+    int page = 1,
+    dynamic previousResponse,
+  }) async {
+    const baseUrl =
+        "https://api.live.bilibili.com/xlive/web-interface/v1/second/getListByArea";
+    var url =
+        "$baseUrl?platform=web&parent_area_id=${category.parentId}&area_id=${category.id}&sort=online&page_size=30&page=$page";
+
+    var queryParams = await getWbiSign(url);
+
+    var result = await HttpClient.instance.getJson(
+      baseUrl,
+      queryParameters: queryParams,
+      header: await getHeader(),
+    );
+
+    var data = result is Map ? result["data"] : null;
+    if (data is! Map || data["list"] is! List) {
+      throw CoreError(
+        "接口返回数据结构异常",
+        method: "GET",
+        url: baseUrl,
+        queryParameters: queryParams,
+        responseData: {
+          "primary_response": previousResponse,
+          "fallback_response": result,
+        },
+      );
+    }
+    return _parseCategoryResult(data);
+  }
+
+  LiveCategoryResult _parseCategoryResult(Map data) {
+    var list = data["list"] as List;
+    var hasMoreValue = data["has_more"];
+    var hasMore = hasMoreValue == true || hasMoreValue == 1;
+    if (hasMoreValue == null) {
+      hasMore = list.isNotEmpty;
+    }
     var items = <LiveRoomItem>[];
-    for (var item in result["data"]["list"]) {
+    for (var item in list) {
+      if (item is! Map) {
+        continue;
+      }
       var roomItem = LiveRoomItem(
-        roomId: item["roomid"].toString(),
-        title: item["title"].toString(),
-        cover: "${item["cover"]}@400w.jpg",
-        userName: item["uname"].toString(),
+        roomId: (item["roomid"] ?? item["room_id"] ?? "").toString(),
+        title: (item["title"] ?? "").toString(),
+        cover: "${item["cover"] ?? item["user_cover"] ?? ""}@400w.jpg",
+        userName: (item["uname"] ?? item["user_name"] ?? "").toString(),
         online: int.tryParse(item["online"].toString()) ?? 0,
       );
       items.add(roomItem);
@@ -122,8 +176,9 @@ class BiliBiliSite implements LiveSite {
   }
 
   @override
-  Future<List<LivePlayQuality>> getPlayQualites(
-      {required LiveRoomDetail detail}) async {
+  Future<List<LivePlayQuality>> getPlayQualites({
+    required LiveRoomDetail detail,
+  }) async {
     List<LivePlayQuality> qualities = [];
     var result = await HttpClient.instance.getJson(
       "https://api.live.bilibili.com/xlive/web-room/v2/index/getRoomPlayInfo",
@@ -138,12 +193,12 @@ class BiliBiliSite implements LiveSite {
     );
     var qualitiesMap = <int, String>{};
     for (var item in result["data"]["playurl_info"]["playurl"]["g_qn_desc"]) {
-      qualitiesMap[int.tryParse(item["qn"].toString()) ?? 0] =
-          item["desc"].toString();
+      qualitiesMap[int.tryParse(item["qn"].toString()) ?? 0] = item["desc"]
+          .toString();
     }
 
-    for (var item in result["data"]["playurl_info"]["playurl"]["stream"][0]
-        ["format"][0]["codec"][0]["accept_qn"]) {
+    for (var item
+        in result["data"]["playurl_info"]["playurl"]["stream"][0]["format"][0]["codec"][0]["accept_qn"]) {
       var qualityItem = LivePlayQuality(
         quality: qualitiesMap[item] ?? "未知清晰度",
         data: item,
@@ -154,9 +209,10 @@ class BiliBiliSite implements LiveSite {
   }
 
   @override
-  Future<LivePlayUrl> getPlayUrls(
-      {required LiveRoomDetail detail,
-      required LivePlayQuality quality}) async {
+  Future<LivePlayUrl> getPlayUrls({
+    required LiveRoomDetail detail,
+    required LivePlayQuality quality,
+  }) async {
     List<String> urls = [];
     var result = await HttpClient.instance.getJson(
       "https://api.live.bilibili.com/xlive/web-room/v2/index/getRoomPlayInfo",
@@ -179,9 +235,7 @@ class BiliBiliSite implements LiveSite {
           var urlList = codecItem["url_info"];
           var baseUrl = codecItem["base_url"].toString();
           for (var urlItem in urlList) {
-            urls.add(
-              "${urlItem["host"]}$baseUrl${urlItem["extra"]}",
-            );
+            urls.add("${urlItem["host"]}$baseUrl${urlItem["extra"]}");
           }
         }
       }
@@ -199,7 +253,7 @@ class BiliBiliSite implements LiveSite {
       headers: {
         "referer": "https://live.bilibili.com",
         "user-agent":
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36 Edg/115.0.1901.188"
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36 Edg/115.0.1901.188",
       },
     );
   }
@@ -253,8 +307,8 @@ class BiliBiliSite implements LiveSite {
 
     //var buvid = await getBuvid();
     // 从 roomInfo 中提取 live_start_time
-    String? liveStartTime =
-        roomInfo["room_info"]?["live_start_time"]?.toString();
+    String? liveStartTime = roomInfo["room_info"]?["live_start_time"]
+        ?.toString();
 
     // 计算开播时长并打印到控制台 (参考斗鱼的实现)
     if (liveStartTime != null &&
@@ -317,8 +371,10 @@ class BiliBiliSite implements LiveSite {
   }
 
   @override
-  Future<LiveSearchRoomResult> searchRooms(String keyword,
-      {int page = 1}) async {
+  Future<LiveSearchRoomResult> searchRooms(
+    String keyword, {
+    int page = 1,
+  }) async {
     var result = await HttpClient.instance.getJson(
       "https://api.bilibili.com/x/web-interface/search/type?context=&search_type=live&cover_type=user_cover",
       queryParameters: {
@@ -329,7 +385,7 @@ class BiliBiliSite implements LiveSite {
         "_extra": "",
         "highlight": 0,
         "single_column": 0,
-        "page": page
+        "page": page,
       },
       header: await getHeader(),
     );
@@ -352,8 +408,10 @@ class BiliBiliSite implements LiveSite {
   }
 
   @override
-  Future<LiveSearchAnchorResult> searchAnchors(String keyword,
-      {int page = 1}) async {
+  Future<LiveSearchAnchorResult> searchAnchors(
+    String keyword, {
+    int page = 1,
+  }) async {
     var result = await HttpClient.instance.getJson(
       "https://api.bilibili.com/x/web-interface/search/type?context=&search_type=live_user&cover_type=user_cover",
       queryParameters: {
@@ -364,7 +422,7 @@ class BiliBiliSite implements LiveSite {
         "_extra": "",
         "highlight": 0,
         "single_column": 0,
-        "page": page
+        "page": page,
       },
       header: await getHeader(),
     );
@@ -389,22 +447,19 @@ class BiliBiliSite implements LiveSite {
   Future<bool> getLiveStatus({required String roomId}) async {
     var result = await HttpClient.instance.getJson(
       "https://api.live.bilibili.com/room/v1/Room/get_info",
-      queryParameters: {
-        "room_id": roomId,
-      },
+      queryParameters: {"room_id": roomId},
       header: await getHeader(),
     );
     return (asT<int?>(result["data"]["live_status"]) ?? 0) == 1;
   }
 
   @override
-  Future<List<LiveSuperChatMessage>> getSuperChatMessage(
-      {required String roomId}) async {
+  Future<List<LiveSuperChatMessage>> getSuperChatMessage({
+    required String roomId,
+  }) async {
     var result = await HttpClient.instance.getJson(
       "https://api.live.bilibili.com/av/v1/SuperChat/getMessageList",
-      queryParameters: {
-        "room_id": roomId,
-      },
+      queryParameters: {"room_id": roomId},
       header: await getHeader(),
     );
     List<LiveSuperChatMessage> ls = [];
@@ -412,9 +467,7 @@ class BiliBiliSite implements LiveSite {
       var message = LiveSuperChatMessage(
         backgroundBottomColor: item["background_bottom_color"].toString(),
         backgroundColor: item["background_color"].toString(),
-        endTime: DateTime.fromMillisecondsSinceEpoch(
-          item["end_time"] * 1000,
-        ),
+        endTime: DateTime.fromMillisecondsSinceEpoch(item["end_time"] * 1000),
         face: "${item["user_info"]["face"]}@200w.jpg",
         message: item["message"].toString(),
         price: item["price"],
@@ -456,10 +509,7 @@ class BiliBiliSite implements LiveSite {
       );
       return result["data"];
     } catch (e) {
-      return {
-        "b_3": "",
-        "b_4": "",
-      };
+      return {"b_3": "", "b_4": ""};
     }
   }
 
@@ -529,7 +579,7 @@ class BiliBiliSite implements LiveSite {
     20,
     34,
     44,
-    52
+    52,
   ];
   Future<(String, String)> getWbiKeys() async {
     if (kImgKey.isNotEmpty && kSubKey.isNotEmpty) {
@@ -600,10 +650,9 @@ class BiliBiliSite implements LiveSite {
       queryParameters: {},
       header: await getHeader(),
     );
-    var id = RegExp(r'"access_id":"(.*?)"')
-        .firstMatch(resp)
-        ?.group(1)
-        ?.replaceAll("\\", "");
+    var id = RegExp(
+      r'"access_id":"(.*?)"',
+    ).firstMatch(resp)?.group(1)?.replaceAll("\\", "");
     accessId = id ?? "";
     return accessId;
   }

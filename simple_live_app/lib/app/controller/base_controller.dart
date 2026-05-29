@@ -31,9 +31,14 @@ class BaseController extends GetxController {
   /// * [msg] 错误信息
   /// * [showPageError] 显示页面错误
   /// * 只在第一页加载错误时showPageError=true，后续页加载错误时使用Toast弹出通知
-  void handleError(Object exception, {bool showPageError = false}) {
-    Log.e(exception.toString(), StackTrace.current);
-    var msg = exceptionToString(exception);
+  void handleError(
+    Object exception, {
+    bool showPageError = false,
+    StackTrace? stackTrace,
+  }) {
+    final trace = stackTrace ?? StackTrace.current;
+    Log.e(exception.toString(), trace);
+    var msg = exceptionToString(exception, trace);
 
     if (showPageError) {
       pageError.value = true;
@@ -43,8 +48,49 @@ class BaseController extends GetxController {
     }
   }
 
-  String exceptionToString(Object exception) {
-    return exception.toString().replaceAll("Exception:", "");
+  String exceptionToString(Object exception, [StackTrace? stackTrace]) {
+    final text = exception.toString().replaceAll("Exception:", "").trim();
+    if (_hasDiagnosticFields(text)) {
+      return text;
+    }
+    final lines = <String>[
+      _summaryForException(exception),
+      '',
+      'Exception Type: ${exception.runtimeType}',
+      'Exception: $text',
+    ];
+    if (stackTrace != null) {
+      lines
+        ..add('')
+        ..add('Stack Trace:')
+        ..add(stackTrace.toString());
+    }
+    return lines.join('\n');
+  }
+
+  bool _hasDiagnosticFields(String text) {
+    return text.contains('\nURL: ') ||
+        text.contains('\nResponse Body: ') ||
+        text.contains('\nStack Trace:');
+  }
+
+  String _summaryForException(Object exception) {
+    final text = exception.toString();
+    if (text.contains('SocketException') ||
+        text.contains('Connection') ||
+        text.contains('connection')) {
+      return '网络连接失败';
+    }
+    if (text.contains('Timeout') || text.contains('timed out')) {
+      return '请求超时';
+    }
+    if (text.contains('FormatException')) {
+      return '数据格式解析失败';
+    }
+    if (text.contains('NoSuchMethodError') || text.contains('null')) {
+      return '接口返回数据结构异常';
+    }
+    return '发生异常';
   }
 
   void onLogin() {}
@@ -94,8 +140,8 @@ class BasePageController<T> extends BaseController {
       } else {
         list.addAll(result);
       }
-    } catch (e) {
-      handleError(e, showPageError: currentPage == 1);
+    } catch (e, stackTrace) {
+      handleError(e, showPageError: currentPage == 1, stackTrace: stackTrace);
     } finally {
       loadding = false;
       pageLoadding.value = false;
