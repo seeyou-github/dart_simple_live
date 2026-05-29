@@ -106,6 +106,11 @@ class BiliBiliSite implements LiveSite {
       header: await getHeader(),
     );
 
+    _ensureBiliResponseSuccess(
+      result,
+      url: baseUrl,
+      queryParameters: queryParams,
+    );
     var data = result is Map ? result["data"] : null;
     if (data is! Map || data["list"] is! List) {
       return _getCategoryRoomsByArea(
@@ -114,7 +119,7 @@ class BiliBiliSite implements LiveSite {
         previousResponse: result,
       );
     }
-    return _parseCategoryResult(data);
+    return _parseCategoryResult(data, category);
   }
 
   Future<LiveCategoryResult> _getCategoryRoomsByArea(
@@ -135,6 +140,12 @@ class BiliBiliSite implements LiveSite {
       header: await getHeader(),
     );
 
+    _ensureBiliResponseSuccess(
+      result,
+      url: baseUrl,
+      queryParameters: queryParams,
+      previousResponse: previousResponse,
+    );
     var data = result is Map ? result["data"] : null;
     if (data is! Map || data["list"] is! List) {
       throw CoreError(
@@ -148,10 +159,42 @@ class BiliBiliSite implements LiveSite {
         },
       );
     }
-    return _parseCategoryResult(data);
+    return _parseCategoryResult(data, category);
   }
 
-  LiveCategoryResult _parseCategoryResult(Map data) {
+  void _ensureBiliResponseSuccess(
+    dynamic result, {
+    required String url,
+    required Map<String, dynamic> queryParameters,
+    dynamic previousResponse,
+  }) {
+    if (result is! Map) {
+      throw CoreError(
+        "接口返回数据结构异常",
+        method: "GET",
+        url: url,
+        queryParameters: queryParameters,
+        responseData: result,
+      );
+    }
+    var code = int.tryParse((result["code"] ?? 0).toString()) ?? 0;
+    if (code != 0) {
+      throw CoreError(
+        "哔哩哔哩接口返回错误($code)",
+        method: "GET",
+        url: url,
+        queryParameters: queryParameters,
+        responseData: previousResponse == null
+            ? result
+            : {
+                "primary_response": previousResponse,
+                "fallback_response": result,
+              },
+      );
+    }
+  }
+
+  LiveCategoryResult _parseCategoryResult(Map data, LiveSubCategory category) {
     var list = data["list"] as List;
     var hasMoreValue = data["has_more"];
     var hasMore = hasMoreValue == true || hasMoreValue == 1;
@@ -159,8 +202,13 @@ class BiliBiliSite implements LiveSite {
       hasMore = list.isNotEmpty;
     }
     var items = <LiveRoomItem>[];
+    var hasCategoryFields = false;
     for (var item in list) {
       if (item is! Map) {
+        continue;
+      }
+      hasCategoryFields |= _hasCategoryFields(item);
+      if (!_matchesCategory(item, category)) {
         continue;
       }
       var roomItem = LiveRoomItem(
@@ -172,7 +220,54 @@ class BiliBiliSite implements LiveSite {
       );
       items.add(roomItem);
     }
+    if (items.isEmpty && list.isNotEmpty && hasCategoryFields) {
+      throw CoreError(
+        "分类接口返回非当前分类内容",
+        responseData: {
+          "category": {
+            "parent_area_id": category.parentId,
+            "area_id": category.id,
+            "name": category.name,
+          },
+          "response_data": data,
+        },
+      );
+    }
+    if (items.isEmpty && list.isNotEmpty && !hasCategoryFields) {
+      throw CoreError(
+        "分类接口返回内容缺少分类字段，无法确认是否为当前分类",
+        responseData: {
+          "category": {
+            "parent_area_id": category.parentId,
+            "area_id": category.id,
+            "name": category.name,
+          },
+          "response_data": data,
+        },
+      );
+    }
     return LiveCategoryResult(hasMore: hasMore, items: items);
+  }
+
+  bool _hasCategoryFields(Map item) {
+    return item.containsKey("area_id") ||
+        item.containsKey("parent_area_id") ||
+        item.containsKey("parent_id");
+  }
+
+  bool _matchesCategory(Map item, LiveSubCategory category) {
+    var areaId = item["area_id"]?.toString();
+    var parentAreaId = (item["parent_area_id"] ?? item["parent_id"])
+        ?.toString();
+    if (areaId != null && areaId.isNotEmpty && areaId != category.id) {
+      return false;
+    }
+    if (parentAreaId != null &&
+        parentAreaId.isNotEmpty &&
+        parentAreaId != category.parentId) {
+      return false;
+    }
+    return true;
   }
 
   @override
