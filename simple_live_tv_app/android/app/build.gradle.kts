@@ -32,10 +32,9 @@ android {
 
     signingConfigs {
         create("release") {
-            val windowsStoreFile = java.io.File("D:\\Code\\Flutter_simple_live\\simple_live_app\\android\\Test.jks")
             keyAlias = "Test"
             keyPassword = "123456"
-            storeFile = if (windowsStoreFile.exists()) windowsStoreFile else file("../Test.jks")
+            storeFile = file("../../simple_live_app/android/Test.jks")
             storePassword = "123456"
             isV1SigningEnabled = true
             isV2SigningEnabled = true
