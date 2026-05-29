@@ -15,10 +15,6 @@ android {
         targetCompatibility = JavaVersion.VERSION_11
     }
 
-    kotlinOptions {
-        jvmTarget = JavaVersion.VERSION_11.toString()
-    }
-
     defaultConfig {
         // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
         applicationId = "com.xycz.simple_live_tv"
@@ -34,7 +30,7 @@ android {
         create("release") {
             keyAlias = "Test"
             keyPassword = "123456"
-            storeFile = file("../../simple_live_app/android/Test.jks")
+            storeFile = file("../../../simple_live_app/android/Test.jks")
             storePassword = "123456"
             isV1SigningEnabled = true
             isV2SigningEnabled = true
@@ -53,6 +49,12 @@ android {
                 "proguard-rules.pro"
             )
         }
+    }
+}
+
+kotlin {
+    compilerOptions {
+        jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_11)
     }
 }
 
