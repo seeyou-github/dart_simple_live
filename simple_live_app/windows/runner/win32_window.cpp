@@ -180,7 +180,7 @@ Win32Window::MessageHandler(HWND hwnd,
                             LPARAM const lparam) noexcept {
   switch (message) {
     case WM_CLOSE:
-      ExitProcess(EXIT_SUCCESS);
+      TerminateProcess(GetCurrentProcess(), EXIT_SUCCESS);
       return 0;
 
     case WM_DESTROY:
