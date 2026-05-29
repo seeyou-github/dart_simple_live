@@ -92,7 +92,7 @@ class MyApp extends StatelessWidget {
       splitScreenMode: true,
       builder: (context, child) {
         return GetMaterialApp(
-          title: 'Simple Live TV',
+          title: 'Live TV',
           theme: AppStyle.lightTheme,
           initialRoute: AppSettingsController.instance.firstRun
               ? RoutePath.kAgreement
@@ -112,9 +112,9 @@ class MyApp extends StatelessWidget {
             ),
             //字体大小不跟随系统变化
             builder: (context, child) => MediaQuery(
-              data: MediaQuery.of(context).copyWith(
-                textScaler: const TextScaler.linear(1.0),
-              ),
+              data: MediaQuery.of(
+                context,
+              ).copyWith(textScaler: const TextScaler.linear(1.0)),
               child: child!,
             ),
           ),

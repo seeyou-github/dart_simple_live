@@ -87,9 +87,7 @@ class SyncService extends GetxService {
 
     await udp!.send(
       json.encode(data).codeUnits,
-      Endpoint.broadcast(
-        port: const Port(udpPort),
-      ),
+      Endpoint.broadcast(port: const Port(udpPort)),
     );
     Log.i("send udp info: $data");
   }
@@ -119,7 +117,7 @@ class SyncService extends GetxService {
   }
 
   Future<String> getDeviceName() async {
-    var name = "SimpleLive-TV";
+    var name = "Live-TV";
     if (Platform.isAndroid) {
       var info = await deviceInfo.androidInfo;
       name = info.model;
@@ -197,8 +195,9 @@ class SyncService extends GetxService {
   /// 同步关注用户列表
   Future<shelf.Response> _syncFollowUserReuqest(shelf.Request request) async {
     try {
-      var overlay =
-          int.parse(request.requestedUri.queryParameters['overlay'] ?? '0');
+      var overlay = int.parse(
+        request.requestedUri.queryParameters['overlay'] ?? '0',
+      );
 
       var body = await request.readAsString();
       Log.d('_syncFollowUserReuqest: $body');
@@ -213,23 +212,18 @@ class SyncService extends GetxService {
 
       SmartDialog.showToast('已同步关注用户列表');
       EventBus.instance.emit(Constant.kUpdateFollow, 0);
-      return toJsonResponse({
-        'status': true,
-        'message': 'success',
-      });
+      return toJsonResponse({'status': true, 'message': 'success'});
     } catch (e) {
-      return toJsonResponse({
-        'status': false,
-        'message': e.toString(),
-      });
+      return toJsonResponse({'status': false, 'message': e.toString()});
     }
   }
 
   /// 同步观看记录
   Future<shelf.Response> _syncHistoryReuqest(shelf.Request request) async {
     try {
-      var overlay =
-          int.parse(request.requestedUri.queryParameters['overlay'] ?? '0');
+      var overlay = int.parse(
+        request.requestedUri.queryParameters['overlay'] ?? '0',
+      );
       var body = await request.readAsString();
       Log.d('_syncFollowUserReuqest: $body');
       var jsonBody = json.decode(body);
@@ -250,23 +244,18 @@ class SyncService extends GetxService {
 
       SmartDialog.showToast('已同步观看记录');
       EventBus.instance.emit(Constant.kUpdateHistory, 0);
-      return toJsonResponse({
-        'status': true,
-        'message': 'success',
-      });
+      return toJsonResponse({'status': true, 'message': 'success'});
     } catch (e) {
-      return toJsonResponse({
-        'status': false,
-        'message': e.toString(),
-      });
+      return toJsonResponse({'status': false, 'message': e.toString()});
     }
   }
 
   /// 同步弹幕屏蔽词
   Future<shelf.Response> _syncBlockedWordReuqest(shelf.Request request) async {
     try {
-      var overlay =
-          int.parse(request.requestedUri.queryParameters['overlay'] ?? '0');
+      var overlay = int.parse(
+        request.requestedUri.queryParameters['overlay'] ?? '0',
+      );
       var body = await request.readAsString();
       Log.d('_syncBlockedWordReuqest: $body');
       var jsonBody = json.decode(body);
@@ -277,15 +266,9 @@ class SyncService extends GetxService {
         AppSettingsController.instance.addShieldList(keyword.trim());
       }
       SmartDialog.showToast('已同步弹幕屏蔽词');
-      return toJsonResponse({
-        'status': true,
-        'message': 'success',
-      });
+      return toJsonResponse({'status': true, 'message': 'success'});
     } catch (e) {
-      return toJsonResponse({
-        'status': false,
-        'message': e.toString(),
-      });
+      return toJsonResponse({'status': false, 'message': e.toString()});
     }
   }
 
@@ -299,24 +282,16 @@ class SyncService extends GetxService {
       BiliBiliAccountService.instance.setCookie(cookie);
       BiliBiliAccountService.instance.loadUserInfo();
       SmartDialog.showToast('已同步哔哩哔哩账号');
-      return toJsonResponse({
-        'status': true,
-        'message': 'success',
-      });
+      return toJsonResponse({'status': true, 'message': 'success'});
     } catch (e) {
-      return toJsonResponse({
-        'status': false,
-        'message': e.toString(),
-      });
+      return toJsonResponse({'status': false, 'message': e.toString()});
     }
   }
 
   shelf.Response toJsonResponse(Map<String, dynamic> data) {
     return shelf.Response.ok(
       json.encode(data),
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers: {'Content-Type': 'application/json'},
       encoding: Encoding.getByName('utf-8'),
     );
   }

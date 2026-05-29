@@ -102,11 +102,11 @@ class RemoteSyncRoomController extends BaseController {
       SmartDialog.showToast("房间已被销毁");
       Get.back();
     });
-    _roomUserUpdatedSubscription = signalR.onRoomUserUpdatedStream.listen(
-      (roomUsers) {
-        this.roomUsers.assignAll(roomUsers);
-      },
-    );
+    _roomUserUpdatedSubscription = signalR.onRoomUserUpdatedStream.listen((
+      roomUsers,
+    ) {
+      this.roomUsers.assignAll(roomUsers);
+    });
     _onFavoriteSubscription = signalR.onFavoriteStream.listen((data) {
       onReceiveFavorite(data.$1, data.$2);
     });
@@ -347,7 +347,7 @@ class RemoteSyncRoomController extends BaseController {
             style: Get.textTheme.titleLarge,
           ),
           const Text(
-            "请使用其他Simple Live客户端扫描上方二维码\n建立连接后可选择需要同步的数据",
+            "请使用其他Live客户端扫描上方二维码\n建立连接后可选择需要同步的数据",
             textAlign: TextAlign.center,
           ),
         ],

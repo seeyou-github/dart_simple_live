@@ -34,23 +34,22 @@ class MinePage extends StatelessWidget {
                 width: 56,
                 height: 56,
               ),
-              title: const Text(
-                "Simple Live",
-                style: TextStyle(height: 1.0),
-              ),
+              title: const Text("Live", style: TextStyle(height: 1.0)),
               subtitle: const Text("简简单单看直播"),
               trailing: const Icon(Icons.chevron_right),
               onTap: () {
-                Get.dialog(AboutDialog(
-                  applicationIcon: Image.asset(
-                    'assets/images/logo.png',
-                    width: 48,
-                    height: 48,
+                Get.dialog(
+                  AboutDialog(
+                    applicationIcon: Image.asset(
+                      'assets/images/logo.png',
+                      width: 48,
+                      height: 48,
+                    ),
+                    applicationName: "Live",
+                    applicationVersion: "简简单单看直播",
+                    applicationLegalese: "Ver ${Utils.packageInfo.version}",
                   ),
-                  applicationName: "Simple Live",
-                  applicationVersion: "简简单单看直播",
-                  applicationLegalese: "Ver ${Utils.packageInfo.version}",
-                ));
+                );
               },
             ),
             Divider(
@@ -64,10 +63,7 @@ class MinePage extends StatelessWidget {
                 ListTile(
                   leading: const Icon(Remix.history_line),
                   title: const Text("观看记录"),
-                  trailing: const Icon(
-                    Icons.chevron_right,
-                    color: Colors.grey,
-                  ),
+                  trailing: const Icon(Icons.chevron_right, color: Colors.grey),
                   onTap: () {
                     Get.toNamed(RoutePath.kHistory);
                   },
@@ -82,10 +78,7 @@ class MinePage extends StatelessWidget {
             ListTile(
               leading: const Icon(Remix.account_circle_line),
               title: const Text("账号管理"),
-              trailing: const Icon(
-                Icons.chevron_right,
-                color: Colors.grey,
-              ),
+              trailing: const Icon(Icons.chevron_right, color: Colors.grey),
               onTap: () {
                 Get.toNamed(RoutePath.kSettingsAccount);
               },
@@ -98,10 +91,7 @@ class MinePage extends StatelessWidget {
             ListTile(
               leading: const Icon(Icons.devices),
               title: const Text("数据同步"),
-              trailing: const Icon(
-                Icons.chevron_right,
-                color: Colors.grey,
-              ),
+              trailing: const Icon(Icons.chevron_right, color: Colors.grey),
               onTap: () {
                 Get.toNamed(RoutePath.kSync);
               },
@@ -114,10 +104,7 @@ class MinePage extends StatelessWidget {
             ListTile(
               leading: const Icon(Remix.link),
               title: const Text("链接解析"),
-              trailing: const Icon(
-                Icons.chevron_right,
-                color: Colors.grey,
-              ),
+              trailing: const Icon(Icons.chevron_right, color: Colors.grey),
               onTap: () {
                 Get.toNamed(RoutePath.kTools);
               },
@@ -133,10 +120,7 @@ class MinePage extends StatelessWidget {
                 ListTile(
                   leading: const Icon(Remix.moon_line),
                   title: const Text("外观设置"),
-                  trailing: const Icon(
-                    Icons.chevron_right,
-                    color: Colors.grey,
-                  ),
+                  trailing: const Icon(Icons.chevron_right, color: Colors.grey),
                   onTap: () {
                     Get.toNamed(RoutePath.kAppstyleSetting);
                   },
@@ -144,10 +128,7 @@ class MinePage extends StatelessWidget {
                 ListTile(
                   leading: const Icon(Remix.home_2_line),
                   title: const Text("主页设置"),
-                  trailing: const Icon(
-                    Icons.chevron_right,
-                    color: Colors.grey,
-                  ),
+                  trailing: const Icon(Icons.chevron_right, color: Colors.grey),
                   onTap: () {
                     Get.toNamed(RoutePath.kSettingsIndexed);
                   },
@@ -155,10 +136,7 @@ class MinePage extends StatelessWidget {
                 ListTile(
                   leading: const Icon(Remix.play_circle_line),
                   title: const Text("直播设置"),
-                  trailing: const Icon(
-                    Icons.chevron_right,
-                    color: Colors.grey,
-                  ),
+                  trailing: const Icon(Icons.chevron_right, color: Colors.grey),
                   onTap: () {
                     Get.toNamed(RoutePath.kSettingsPlay);
                   },
@@ -166,10 +144,7 @@ class MinePage extends StatelessWidget {
                 ListTile(
                   leading: const Icon(Remix.text),
                   title: const Text("弹幕设置"),
-                  trailing: const Icon(
-                    Icons.chevron_right,
-                    color: Colors.grey,
-                  ),
+                  trailing: const Icon(Icons.chevron_right, color: Colors.grey),
                   onTap: () {
                     Get.toNamed(RoutePath.kSettingsDanmu);
                   },
@@ -177,10 +152,7 @@ class MinePage extends StatelessWidget {
                 ListTile(
                   leading: const Icon(Remix.heart_line),
                   title: const Text("关注设置"),
-                  trailing: const Icon(
-                    Icons.chevron_right,
-                    color: Colors.grey,
-                  ),
+                  trailing: const Icon(Icons.chevron_right, color: Colors.grey),
                   onTap: () {
                     Get.toNamed(RoutePath.kSettingsFollow);
                   },
@@ -188,10 +160,7 @@ class MinePage extends StatelessWidget {
                 ListTile(
                   leading: const Icon(Remix.timer_2_line),
                   title: const Text("定时关闭"),
-                  trailing: const Icon(
-                    Icons.chevron_right,
-                    color: Colors.grey,
-                  ),
+                  trailing: const Icon(Icons.chevron_right, color: Colors.grey),
                   onTap: () {
                     Get.toNamed(RoutePath.kSettingsAutoExit);
                   },
@@ -199,10 +168,7 @@ class MinePage extends StatelessWidget {
                 ListTile(
                   leading: const Icon(Remix.apps_line),
                   title: const Text("其他设置"),
-                  trailing: const Icon(
-                    Icons.chevron_right,
-                    color: Colors.grey,
-                  ),
+                  trailing: const Icon(Icons.chevron_right, color: Colors.grey),
                   onTap: () {
                     Get.toNamed(RoutePath.kSettingsOther);
                   },
@@ -236,19 +202,13 @@ class MinePage extends StatelessWidget {
                 const ListTile(
                   leading: Icon(Remix.error_warning_line),
                   title: Text("免责声明"),
-                  trailing: Icon(
-                    Icons.chevron_right,
-                    color: Colors.grey,
-                  ),
+                  trailing: Icon(Icons.chevron_right, color: Colors.grey),
                   onTap: Utils.showStatement,
                 ),
                 ListTile(
                   leading: const Icon(Remix.github_line),
                   title: const Text("开源主页"),
-                  trailing: const Icon(
-                    Icons.chevron_right,
-                    color: Colors.grey,
-                  ),
+                  trailing: const Icon(Icons.chevron_right, color: Colors.grey),
                   onTap: () {
                     launchUrlString(
                       "https://github.com/xiaoyaocz/dart_simple_live",

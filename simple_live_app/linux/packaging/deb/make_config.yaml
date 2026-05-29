@@ -1,4 +1,4 @@
-display_name: Simple-Live
+display_name: Live
 package_name: simple-live
 maintainer:
   name: xiaoyaocz
@@ -10,9 +10,9 @@ essential: false
 icon: assets/logo.png
 
 keywords:
-  - Simple Live
+  - Live
 
-generic_name: Simple-Live
+generic_name: Live
 
 categories:
   - Media

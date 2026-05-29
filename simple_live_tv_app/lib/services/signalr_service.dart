@@ -3,11 +3,7 @@ import 'package:signalr_netcore/signalr_client.dart';
 import 'package:simple_live_tv_app/app/log.dart';
 import 'package:simple_live_tv_app/app/utils.dart';
 
-enum SignalRConnectionState {
-  connecting,
-  connected,
-  disconnected,
-}
+enum SignalRConnectionState { connecting, connected, disconnected }
 
 class SignalRService {
   static const String kUrl = "https://sync1.nsapps.cn/sync";
@@ -98,11 +94,13 @@ class SignalRService {
     if (state != SignalRConnectionState.connected) {
       throw Exception("not connected");
     }
-    String app = "Simple Live TV";
+    String app = "Live TV";
     String platform = 'tv';
     String version = Utils.packageInfo.version;
-    var resp = await hubConnection
-        ?.invoke("CreateRoom", args: [app, platform, version]);
+    var resp = await hubConnection?.invoke(
+      "CreateRoom",
+      args: [app, platform, version],
+    );
     return Resp<String>.fromObject(resp);
   }
 
@@ -110,11 +108,13 @@ class SignalRService {
     if (state != SignalRConnectionState.connected) {
       throw Exception("not connected");
     }
-    String app = "Simple Live TV";
+    String app = "Live TV";
     String platform = 'tv';
     String version = Utils.packageInfo.version;
-    var resp = await hubConnection
-        ?.invoke("JoinRoom", args: [roomId, app, platform, version]);
+    var resp = await hubConnection?.invoke(
+      "JoinRoom",
+      args: [roomId, app, platform, version],
+    );
     return Resp.fromObject(resp);
   }
 
@@ -127,8 +127,10 @@ class SignalRService {
     if (state != SignalRConnectionState.connected) {
       throw Exception("not connected");
     }
-    var resp =
-        await hubConnection?.invoke(action, args: [roomName, overlay, content]);
+    var resp = await hubConnection?.invoke(
+      action,
+      args: [roomName, overlay, content],
+    );
     return Resp.fromObject(resp);
   }
 
@@ -152,11 +154,7 @@ class Resp<T> {
   Resp(this.isSuccess, this.message, this.data);
 
   factory Resp.fromJson(Map<String, dynamic> json) {
-    return Resp(
-      json['isSuccess'],
-      json['message'] ?? "",
-      json['data'],
-    );
+    return Resp(json['isSuccess'], json['message'] ?? "", json['data']);
   }
 
   factory Resp.fromObject(Object? obj) {

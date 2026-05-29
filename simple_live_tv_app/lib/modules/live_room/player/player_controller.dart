@@ -19,7 +19,7 @@ mixin PlayerMixin {
   /// 播放器实例
   late final player = Player(
     configuration: const PlayerConfiguration(
-      title: "Simple Live Player",
+      title: "Live Player",
       // bufferSize:
       //     // media-kit #549
       //     AppSettingsController.instance.playerBufferSize.value * 1024 * 1024,
@@ -119,12 +119,7 @@ mixin PlayerStateMixin on PlayerMixin {
   void resetHideControlsTimer() {
     hideControlsTimer?.cancel();
 
-    hideControlsTimer = Timer(
-      const Duration(
-        seconds: 5,
-      ),
-      hideControls,
-    );
+    hideControlsTimer = Timer(const Duration(seconds: 5), hideControls);
   }
 
   void updateScaleMode() {
@@ -147,10 +142,7 @@ mixin PlayerStateMixin on PlayerMixin {
       boxFit = BoxFit.contain;
       aspectRatio = 4 / 3;
     }
-    globalPlayerKey.currentState?.update(
-      aspectRatio: aspectRatio,
-      fit: boxFit,
-    );
+    globalPlayerKey.currentState?.update(aspectRatio: aspectRatio, fit: boxFit);
   }
 }
 mixin PlayerDanmakuMixin on PlayerStateMixin {
@@ -256,14 +248,16 @@ class PlayerController extends BaseController
     });
     _widthSubscription = player.stream.width.listen((event) {
       Log.w(
-          'width:$event  W:${(player.state.width)}  H:${(player.state.height)}');
+        'width:$event  W:${(player.state.width)}  H:${(player.state.height)}',
+      );
       width.value = event ?? 0;
       // isVertical.value =
       //     (player.state.height ?? 9) > (player.state.width ?? 16);
     });
     _heightSubscription = player.stream.height.listen((event) {
       Log.w(
-          'height:$event  W:${(player.state.width)}  H:${(player.state.height)}');
+        'height:$event  W:${(player.state.width)}  H:${(player.state.height)}',
+      );
       height.value = event ?? 0;
       // isVertical.value =
       //     (player.state.height ?? 9) > (player.state.width ?? 16);

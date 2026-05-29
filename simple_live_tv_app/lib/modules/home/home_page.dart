@@ -30,10 +30,7 @@ class HomePage extends GetView<HomeController> {
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
               AppStyle.hGap48,
-              Text(
-                "Simple Live TV",
-                style: AppStyle.titleStyleWhite,
-              ),
+              Text("Live TV", style: AppStyle.titleStyleWhite),
               AppStyle.hGap24,
               const Spacer(),
               Obx(
@@ -141,10 +138,7 @@ class HomePage extends GetView<HomeController> {
                       ),
                       AppStyle.hGap24,
                       Expanded(
-                        child: Text(
-                          "我的关注",
-                          style: AppStyle.titleStyleWhite,
-                        ),
+                        child: Text("我的关注", style: AppStyle.titleStyleWhite),
                       ),
                       Obx(
                         () => Visibility(
@@ -160,10 +154,7 @@ class HomePage extends GetView<HomeController> {
                                 ),
                               ),
                               AppStyle.hGap16,
-                              Text(
-                                "更新状态中...",
-                                style: AppStyle.textStyleWhite,
-                              ),
+                              Text("更新状态中...", style: AppStyle.textStyleWhite),
                             ],
                           ),
                         ),
@@ -241,7 +232,7 @@ class HomePage extends GetView<HomeController> {
                       ],
                     ),
                   ),
-                )
+                ),
               ],
             ),
           ),
@@ -313,8 +304,10 @@ class HomePage extends GetView<HomeController> {
                           ),
                         ),
                         onTap: () {
-                          FollowUserService.instance
-                              .removeItem(item, refresh: false);
+                          FollowUserService.instance.removeItem(
+                            item,
+                            refresh: false,
+                          );
                         },
                       );
                     },
@@ -323,9 +316,7 @@ class HomePage extends GetView<HomeController> {
                 Obx(
                   () => Visibility(
                     visible: FollowUserService.instance.list.isEmpty,
-                    child: const AppEmptyWidget(
-                      text: "关注列表为空，快去关注一些主播吧",
-                    ),
+                    child: const AppEmptyWidget(text: "关注列表为空，快去关注一些主播吧"),
                   ),
                 ),
               ],
@@ -346,9 +337,7 @@ class HomePage extends GetView<HomeController> {
       builder: (_) => AlertDialog(
         backgroundColor: Get.theme.cardColor,
         surfaceTintColor: Colors.transparent,
-        shape: RoundedRectangleBorder(
-          borderRadius: AppStyle.radius16,
-        ),
+        shape: RoundedRectangleBorder(borderRadius: AppStyle.radius16),
         contentPadding: AppStyle.edgeInsetsA48,
         content: Column(
           mainAxisSize: MainAxisSize.min,
