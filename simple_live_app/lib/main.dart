@@ -35,6 +35,7 @@ import 'package:window_manager/window_manager.dart';
 
 import 'package:path/path.dart' as p;
 import 'package:dynamic_color/dynamic_color.dart';
+import 'package:simple_live_app/app/app_dirs.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -43,7 +44,7 @@ void main() async {
   MediaKit.ensureInitialized();
   await Hive.initFlutter(
     (!Platform.isAndroid && !Platform.isIOS)
-        ? (await getApplicationSupportDirectory()).path
+        ? (await AppDirs.appDataDirectory()).path
         : null,
   );
   //初始化服务
@@ -61,7 +62,7 @@ void main() async {
 
 /// 将Hive数据迁移到Application Support
 Future migrateData() async {
-  if (Platform.isAndroid || Platform.isIOS) {
+  if (Platform.isAndroid || Platform.isIOS || Platform.isWindows) {
     return;
   }
   var hiveFileList = [
@@ -73,7 +74,7 @@ Future migrateData() async {
     "danmushield",
   ];
   try {
-    var newDir = await getApplicationSupportDirectory();
+    var newDir = await AppDirs.appDataDirectory();
     var hiveFile = File(p.join(newDir.path, "followuser.hive"));
     if (await hiveFile.exists()) {
       return;

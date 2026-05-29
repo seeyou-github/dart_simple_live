@@ -14,6 +14,7 @@ import 'package:media_kit_video/media_kit_video.dart';
 import 'package:canvas_danmaku/canvas_danmaku.dart';
 import 'package:volume_controller/volume_controller.dart';
 import 'package:screen_brightness/screen_brightness.dart';
+import 'package:simple_live_app/app/app_dirs.dart';
 import 'package:simple_live_app/app/controller/app_settings_controller.dart';
 import 'package:simple_live_app/app/controller/base_controller.dart';
 import 'package:simple_live_app/app/custom_throttle.dart';
@@ -393,6 +394,13 @@ mixin PlayerSystemMixin on PlayerMixin, PlayerStateMixin, PlayerDanmakuMixin {
       if (Platform.isIOS || Platform.isAndroid) {
         await ImageGallerySaverPlus.saveImage(imageData);
         SmartDialog.showToast("已保存截图至相册");
+      } else if (Platform.isWindows) {
+        var dir = await AppDirs.appDataSubdirectory('screenshots');
+        var file = File(
+          '${dir.path}${Platform.pathSeparator}${DateTime.now().millisecondsSinceEpoch}.jpg',
+        );
+        await file.writeAsBytes(imageData);
+        SmartDialog.showToast("已保存截图至${file.path}");
       } else {
         //选择保存文件夹
         var path = await FilePicker.platform.saveFile(

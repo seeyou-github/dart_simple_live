@@ -8,6 +8,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
 import 'package:get/get.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:simple_live_app/app/app_dirs.dart';
 import 'package:simple_live_app/app/constant.dart';
 import 'package:simple_live_app/app/controller/app_settings_controller.dart';
 import 'package:simple_live_app/app/event_bus.dart';
@@ -125,8 +126,9 @@ class FollowService extends GetxService {
       updateTimer?.cancel();
       updateTimer = Timer.periodic(
         Duration(
-            minutes:
-                AppSettingsController.instance.autoUpdateFollowDuration.value),
+          minutes:
+              AppSettingsController.instance.autoUpdateFollowDuration.value,
+        ),
         (timer) {
           Log.logPrint("Update Follow Timer");
           loadData();
@@ -154,7 +156,8 @@ class FollowService extends GetxService {
   /// 获取最优并发数
   /// 根据 CPU 核心数和用户设置自动计算
   int getOptimalConcurrency() {
-    var userSetting = AppSettingsController.instance.updateFollowThreadCount.value;
+    var userSetting =
+        AppSettingsController.instance.updateFollowThreadCount.value;
 
     // 如果用户设置为 0，则自动根据 CPU 核心数计算
     if (userSetting == 0) {
@@ -269,7 +272,9 @@ class FollowService extends GetxService {
       }
 
       var dir = "";
-      if (Platform.isIOS) {
+      if (Platform.isWindows) {
+        dir = (await AppDirs.appDataSubdirectory('exports')).path;
+      } else if (Platform.isIOS) {
         dir = (await getApplicationDocumentsDirectory()).path;
       } else {
         dir = await FilePicker.platform.getDirectoryPath() ?? "";
@@ -279,7 +284,8 @@ class FollowService extends GetxService {
         return;
       }
       var jsonFile = File(
-          '$dir/SimpleLive_${DateTime.now().millisecondsSinceEpoch ~/ 1000}.json');
+        '$dir/SimpleLive_${DateTime.now().millisecondsSinceEpoch ~/ 1000}.json',
+      );
       var jsonText = generateJson();
       await jsonFile.writeAsString(jsonText);
       SmartDialog.showToast("已导出关注列表");
@@ -325,9 +331,7 @@ class FollowService extends GetxService {
         title: const Text("导出为文本"),
         content: TextField(
           controller: TextEditingController(text: content),
-          decoration: const InputDecoration(
-            border: OutlineInputBorder(),
-          ),
+          decoration: const InputDecoration(border: OutlineInputBorder()),
           minLines: 5,
           maxLines: 8,
         ),
@@ -412,7 +416,7 @@ class FollowService extends GetxService {
             "userName": item.userName,
             "face": item.face,
             "addTime": item.addTime.toString(),
-            "tag": item.tag
+            "tag": item.tag,
           },
         )
         .toList();

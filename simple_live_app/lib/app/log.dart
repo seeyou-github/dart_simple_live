@@ -6,7 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:intl/intl.dart';
 import 'package:logger/logger.dart';
-import 'package:path_provider/path_provider.dart';
+import 'package:simple_live_app/app/app_dirs.dart';
 import 'package:simple_live_app/app/utils.dart';
 
 class Log {
@@ -21,8 +21,9 @@ class Log {
   }
 
   static void writeLog(content, [Level level = Level.info]) {
-    logFileWriter
-        ?.write("[${level.name.toUpperCase()}] $_currentTime：$content");
+    logFileWriter?.write(
+      "[${level.name.toUpperCase()}] $_currentTime：$content",
+    );
   }
 
   static RxList<DebugLogModel> debugLogs = <DebugLogModel>[].obs;
@@ -71,8 +72,11 @@ class Log {
     }
   }
 
-  static void e(String message, StackTrace stackTrace,
-      [bool writeFile = true]) {
+  static void e(
+    String message,
+    StackTrace stackTrace, [
+    bool writeFile = true,
+  ]) {
     addDebugLog('$message\r\n\r\n$stackTrace', Colors.red);
     logger.e("${DateTime.now().toString()}\n$message", stackTrace: stackTrace);
     if (writeFile) {
@@ -111,11 +115,7 @@ class LogFileWriter {
   }
   IOSink? fileWriter;
   void initFile() async {
-    var supportDir = await getApplicationSupportDirectory();
-    var logDir = Directory("${supportDir.path}/log");
-    if (!await logDir.exists()) {
-      await logDir.create();
-    }
+    var logDir = await AppDirs.appDataSubdirectory('log');
     var logFile = File("${logDir.path}/$fileName");
     fileWriter = logFile.openWrite(mode: FileMode.append);
     writeSystemInfo();
@@ -138,7 +138,8 @@ class LogFileWriter {
     write("Version: ${Platform.operatingSystemVersion}");
     write("Local: ${Platform.localeName}");
     write(
-        "App Version: ${Utils.packageInfo.version}+${Utils.packageInfo.buildNumber}");
+      "App Version: ${Utils.packageInfo.version}+${Utils.packageInfo.buildNumber}",
+    );
     if (Platform.isAndroid) {
       write((await deviceInfo.androidInfo).data.toString());
     } else if (Platform.isIOS) {

@@ -4,10 +4,10 @@ import 'package:flutter/foundation.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
 import 'package:get/get.dart';
-import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:simple_live_app/app/controller/app_settings_controller.dart';
 import 'package:simple_live_app/app/controller/base_controller.dart';
+import 'package:simple_live_app/app/app_dirs.dart';
 import 'package:simple_live_app/app/log.dart';
 import 'package:path/path.dart' as p;
 import 'package:simple_live_app/app/utils.dart';
@@ -50,7 +50,7 @@ class OtherSettingsController extends BaseController {
     "sdl": "sdl (Cross-platform, via SDL library)",
     "openal": "openal (Cross-platform, OpenAL backend)",
     "libao": "libao (Cross-platform, uses libao library)",
-    "auto": "auto (Not available)"
+    "auto": "auto (Not available)",
   };
 
   var hardwareDecoder = {
@@ -80,7 +80,7 @@ class OtherSettingsController extends BaseController {
     "cuda": "cuda",
     "cuda-copy": "cuda-copy",
     "crystalhd": "crystalhd",
-    "rkmpp": "rkmpp"
+    "rkmpp": "rkmpp",
   };
 
   @override
@@ -102,11 +102,7 @@ class OtherSettingsController extends BaseController {
   }
 
   void loadLogFiles() async {
-    var supportDir = await getApplicationSupportDirectory();
-    var logDir = Directory("${supportDir.path}/log");
-    if (!await logDir.exists()) {
-      await logDir.create();
-    }
+    var logDir = await AppDirs.appDataSubdirectory('log');
     logFiles.clear();
     await logDir.list().forEach((element) {
       var file = element as File;
@@ -125,8 +121,7 @@ class OtherSettingsController extends BaseController {
       return;
     }
 
-    var supportDir = await getApplicationSupportDirectory();
-    var logDir = Directory("${supportDir.path}/log");
+    var logDir = await AppDirs.appDataSubdirectory('log');
     if (await logDir.exists()) {
       await logDir.delete(recursive: true);
     }
@@ -134,12 +129,17 @@ class OtherSettingsController extends BaseController {
   }
 
   void shareLogFile(LogFileModel item) {
-    SharePlus.instance.share(ShareParams(
-      files: [XFile(item.path)],
-    ));
+    SharePlus.instance.share(ShareParams(files: [XFile(item.path)]));
   }
 
   void saveLogFile(LogFileModel item) async {
+    if (Platform.isWindows) {
+      var exportDir = await AppDirs.appDataSubdirectory('exports');
+      var file = File(item.path);
+      await file.copy(p.join(exportDir.path, item.name));
+      SmartDialog.showToast("淇濆瓨鎴愬姛");
+      return;
+    }
     var filePath = await FilePicker.platform.saveFile(
       allowedExtensions: ['log'],
       type: FileType.custom,
@@ -170,12 +170,18 @@ class OtherSettingsController extends BaseController {
       // FilePicker 直接写入
       var inlineSave = Platform.isAndroid || Platform.isIOS || kIsWeb;
 
-      var path = await FilePicker.platform.saveFile(
-        allowedExtensions: ['json'],
-        type: FileType.custom,
-        fileName: "simple_live_config.json",
-        bytes: inlineSave ? bytes : null,
-      );
+      String? path;
+      if (Platform.isWindows) {
+        var exportDir = await AppDirs.appDataSubdirectory('exports');
+        path = p.join(exportDir.path, "simple_live_config.json");
+      } else {
+        path = await FilePicker.platform.saveFile(
+          allowedExtensions: ['json'],
+          type: FileType.custom,
+          fileName: "simple_live_config.json",
+          bytes: inlineSave ? bytes : null,
+        );
+      }
 
       if (path == null && !kIsWeb) {
         SmartDialog.showToast("保存取消");
@@ -217,8 +223,9 @@ class OtherSettingsController extends BaseController {
       LocalStorageService.instance.settingsBox.clear();
       LocalStorageService.instance.shieldBox.clear();
       LocalStorageService.instance.settingsBox.putAll(data["config"]);
-      LocalStorageService.instance.shieldBox
-          .putAll(data["shield"].cast<String, String>());
+      LocalStorageService.instance.shieldBox.putAll(
+        data["shield"].cast<String, String>(),
+      );
       SmartDialog.showToast("导入成功,重启生效");
     } catch (e) {
       Log.logPrint(e);
