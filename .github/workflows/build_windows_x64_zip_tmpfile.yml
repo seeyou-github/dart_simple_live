@@ -2,9 +2,7 @@ name: build_windows_x64_zip_tmpfile
 
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - master
+
 
 permissions:
   contents: read

@@ -1,0 +1,75 @@
+name: build_android_arm64v8a_tmpfile
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build_android_arm64v8a_release_tmpfile:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout master
+        uses: actions/checkout@v4
+        with:
+          ref: master
+
+      - name: Create key.properties
+        run: |
+          echo "storeFile=D:\Code\Flutter_simple_live\simple_live_app\android\Test.jks" > simple_live_app/android/key.properties
+          echo "storePassword=123456" >> simple_live_app/android/key.properties
+          echo "keyPassword=123456" >> simple_live_app/android/key.properties
+          echo "keyAlias=Test" >> simple_live_app/android/key.properties
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: "zulu"
+          java-version: "17"
+          cache: "gradle"
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "3.38.x"
+          cache: true
+
+      - name: Restore packages
+        run: |
+          cd simple_live_app
+          flutter pub get
+
+      - name: Build Android arm64-v8a release APK
+        run: |
+          cd simple_live_app
+          flutter build apk --release --target-platform android-arm64 --split-per-abi
+
+      - name: Upload Android arm64-v8a APK to tmpfile.link
+        shell: bash
+        run: |
+          set -euo pipefail
+          apk_path="${GITHUB_WORKSPACE}/simple_live_app/build/app/outputs/flutter-apk/app-arm64-v8a-release.apk"
+          apk_name="$(basename "$apk_path")"
+
+          if [ ! -f "$apk_path" ]; then
+            echo "Upload file not found: $apk_path" >&2
+            exit 1
+          fi
+
+          response="$(curl -sS -X POST -F "file=@${apk_path}" https://tmpfile.link/api/upload)"
+          echo "$response"
+          download_link="$(echo "$response" | python3 -c "import json,sys; print(json.load(sys.stdin).get('downloadLinkEncoded',''))")"
+          if [ -z "$download_link" ]; then
+            echo "tmpfile.link upload failed: $response" >&2
+            exit 1
+          fi
+
+          {
+            echo "## Android arm64-v8a release build"
+            echo ""
+            echo "- File: \`$apk_name\`"
+            echo "- Download: $download_link"
+            echo "- Retention: tmpfile.link anonymous uploads are deleted after 7 days."
+          } >> "$GITHUB_STEP_SUMMARY"
