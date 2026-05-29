@@ -87,6 +87,10 @@ dev_dependencies:
   flutter_test:
     sdk: flutter
 
+dependency_overrides:
+  permission_handler_windows:
+    path: third_party/permission_handler_windows_stub
+
 flutter_launcher_icons:
   android: true
   ios: true
