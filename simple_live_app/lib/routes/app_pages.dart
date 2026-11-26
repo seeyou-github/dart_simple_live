@@ -43,6 +43,7 @@ import 'package:simple_live_app/modules/settings/indexed_settings/indexed_settin
 import 'package:simple_live_app/modules/settings/other/other_settings_controller.dart';
 import 'package:simple_live_app/modules/settings/other/other_settings_page.dart';
 import 'package:simple_live_app/modules/settings/play_settings_page.dart';
+import 'package:simple_live_app/modules/settings/settings_page.dart';
 
 import '../modules/indexed/indexed_page.dart';
 import 'route_path.dart';
@@ -242,6 +243,11 @@ class AppPages {
       bindings: [
         BindingsBuilder.put(() => OtherSettingsController()),
       ],
+    ),
+    //设置（聚合入口）
+    GetPage(
+      name: RoutePath.kSettings,
+      page: () => const SettingsPage(),
     ),
     //关注设置
     GetPage(

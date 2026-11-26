@@ -14,7 +14,7 @@ class SyncPage extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text("数据同步"),
+        title: const Text("备份同步"),
         actions: [
           Visibility(
             visible: GetPlatform.isAndroid || GetPlatform.isIOS,
