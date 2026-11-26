@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:floating/floating.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
 import 'package:get/get.dart';
 import 'package:lottie/lottie.dart';
 import 'package:media_kit_video/media_kit_video.dart';
@@ -645,6 +646,21 @@ class LiveRoomPage extends GetView<LiveRoomController> {
 
   List<Widget> buildAppbarActions(BuildContext context) {
     return [
+      // 未关注时显示关注按钮，已关注则隐藏
+      Obx(
+        () => controller.followed.value
+            ? const SizedBox.shrink()
+            : IconButton(
+                tooltip: "关注主播",
+                onPressed: () {
+                  controller.followUser();
+                  if (controller.followed.value) {
+                    SmartDialog.showToast("关注成功");
+                  }
+                },
+                icon: const Icon(Remix.heart_line),
+              ),
+      ),
       IconButton(
         onPressed: () {
           showMore();
