@@ -19,6 +19,9 @@ class PageGridView extends StatelessWidget {
   final double crossAxisSpacing, mainAxisSpacing;
   final int crossAxisCount;
   final bool showPCRefreshButton;
+
+  /// 是否在列表末尾显示"加载更多"按钮（无分页的列表传 false）
+  final bool showLoadMore;
   const PageGridView({
     required this.itemBuilder,
     required this.pageController,
@@ -29,9 +32,34 @@ class PageGridView extends StatelessWidget {
     this.crossAxisSpacing = 0.0,
     this.mainAxisSpacing = 0.0,
     this.showPCRefreshButton = true,
+    this.showLoadMore = true,
     required this.crossAxisCount,
     Key? key,
   }) : super(key: key);
+
+  bool get _desktop =>
+      Platform.isWindows || Platform.isLinux || Platform.isMacOS;
+
+  /// 列表末尾的"加载更多"：作为滚动内容的一部分，只有滑动到底部才会出现
+  Widget buildLoadMore(BuildContext context) {
+    var visible = showLoadMore &&
+        _desktop &&
+        pageController.canLoadMore.value &&
+        !pageController.pageLoadding.value &&
+        !pageController.pageEmpty.value;
+    if (!visible) {
+      return const SizedBox.shrink();
+    }
+    return Padding(
+      padding: const EdgeInsets.only(top: 8, bottom: 24),
+      child: Center(
+        child: TextButton(
+          onPressed: pageController.loadData,
+          child: const Text("加载更多"),
+        ),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -50,43 +78,30 @@ class PageGridView extends StatelessWidget {
             firstRefresh: firstRefresh,
             onLoad: pageController.loadData,
             onRefresh: pageController.refreshData,
-            child: MasonryGridView.count(
-              padding: padding,
-              itemCount: pageController.list.length,
-              itemBuilder: itemBuilder,
-              crossAxisCount: crossAxisCount,
-              crossAxisSpacing: crossAxisSpacing,
-              mainAxisSpacing: mainAxisSpacing,
-            ),
-          ),
-          Positioned(
-            bottom: 0,
-            left: 0,
-            right: 0,
-            child: // 加载更多按钮
-                Visibility(
-              visible: (Platform.isWindows ||
-                      Platform.isLinux ||
-                      Platform.isMacOS) &&
-                  pageController.canLoadMore.value &&
-                  !pageController.pageLoadding.value &&
-                  !pageController.pageEmpty.value,
-              child: Center(
-                child: TextButton(
-                  onPressed: pageController.loadData,
-                  child: const Text("加载更多"),
+            child: CustomScrollView(
+              slivers: [
+                SliverPadding(
+                  padding: padding ?? EdgeInsets.zero,
+                  sliver: SliverMasonryGrid.count(
+                    crossAxisCount: crossAxisCount,
+                    crossAxisSpacing: crossAxisSpacing,
+                    mainAxisSpacing: mainAxisSpacing,
+                    childCount: pageController.list.length,
+                    itemBuilder: itemBuilder,
+                  ),
                 ),
-              ),
+                SliverToBoxAdapter(
+                  child: buildLoadMore(context),
+                ),
+              ],
             ),
           ),
           Positioned(
             bottom: 12,
             right: 12,
-            child: // 加载更多按钮
+            child: // 刷新按钮
                 Visibility(
-              visible: (Platform.isWindows ||
-                      Platform.isLinux ||
-                      Platform.isMacOS) &&
+              visible: _desktop &&
                   pageController.canLoadMore.value &&
                   !pageController.pageLoadding.value &&
                   !pageController.pageEmpty.value &&

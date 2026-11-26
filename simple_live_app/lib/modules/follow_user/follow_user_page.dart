@@ -128,6 +128,8 @@ class FollowUserPage extends GetView<FollowUserController> {
               pageController: controller,
               firstRefresh: true,
               showPCRefreshButton: false,
+              // 关注用户一次性展示，无分页，不显示"加载更多"
+              showLoadMore: false,
               itemBuilder: (_, i) {
                 var item = controller.list[i];
                 var site = Sites.allSites[item.siteId]!;
