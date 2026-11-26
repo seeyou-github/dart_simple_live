@@ -3,6 +3,7 @@ import 'dart:math';
 
 import 'package:simple_live_core/simple_live_core.dart';
 import 'package:simple_live_core/src/common/convert_helper.dart';
+import 'package:simple_live_core/src/common/core_error.dart';
 import 'package:simple_live_core/src/common/http_client.dart';
 import 'package:simple_live_core/src/scripts/douyin_sign.dart';
 
@@ -38,30 +39,38 @@ class DouyinSite implements LiveSite {
     CoreLog.d("[Douyin] $msg");
   }
 
-  Map<String, dynamic> headers = {
-    "Authority": kDefaultAuthority,
-    "Referer": kDefaultReferer,
-    "User-Agent": kDefaultUserAgent,
-  };
-
-  Future<Map<String, dynamic>> getRequestHeaders() async {
-    try {
-      // 如果用户已设置 cookie，直接使用用户的 cookie
-      if (cookie.isNotEmpty) {
-        headers["cookie"] = cookie;
-        return headers;
+  /// 只保留 ttwid，避免把账号态字段发给直播/分类接口触发风控。
+  static String? extractTtwid(String source) {
+    for (final part in source.split(';')) {
+      final item = part.trim();
+      final index = item.indexOf('=');
+      if (index <= 0) {
+        continue;
       }
-
-      // 使用默认的 ttwid cookie（只需要 ttwid 即可获取所有画质）
-      headers["cookie"] = kDefaultCookie;
-      return headers;
-    } catch (e) {
-      CoreLog.error(e);
-      if (!(headers["cookie"]?.toString().isNotEmpty ?? false)) {
-        headers["cookie"] = kDefaultCookie;
+      final key = item.substring(0, index).trim().toLowerCase();
+      final value = item.substring(index + 1).trim();
+      if (key == 'ttwid' && value.isNotEmpty) {
+        return 'ttwid=$value';
       }
-      return headers;
     }
+    return null;
+  }
+
+  /// 分类/直播/播放接口只带最小 ttwid；搜索等需要登录态的接口用完整 Cookie。
+  Future<Map<String, dynamic>> getRequestHeaders({
+    bool includeFullCookie = false,
+  }) async {
+    final savedCookie = cookie.trim();
+    final cookieValue = includeFullCookie
+        ? (savedCookie.isNotEmpty ? savedCookie : kDefaultCookie)
+        : (extractTtwid(savedCookie) ?? extractTtwid(kDefaultCookie) ?? kDefaultCookie);
+    // 每次返回新的 header，避免外部修改后污染后续请求。
+    return {
+      "Authority": kDefaultAuthority,
+      "Referer": kDefaultReferer,
+      "User-Agent": kDefaultUserAgent,
+      "cookie": cookieValue,
+    };
   }
 
   @override
@@ -73,18 +82,7 @@ class DouyinSite implements LiveSite {
       header: await getRequestHeaders(),
     );
 
-    var renderData =
-        RegExp(
-          r'\{\\"pathname\\":\\"\/\\",\\"categoryData.*?\]\\n',
-        ).firstMatch(result)?.group(0) ??
-        "";
-    var renderDataJson = json.decode(
-      renderData
-          .trim()
-          .replaceAll('\\"', '"')
-          .replaceAll(r"\\", r"\")
-          .replaceAll(']\\n', ""),
-    );
+    final renderDataJson = _extractCategoryRenderData(result);
 
     for (var item in renderDataJson["categoryData"]) {
       List<LiveSubCategory> subs = [];
@@ -116,6 +114,77 @@ class DouyinSite implements LiveSite {
       categories.add(category);
     }
     return categories;
+  }
+
+  Map<String, dynamic> _extractCategoryRenderData(String html) {
+    const marker = r'\"categoryData\":';
+    final markerIndex = html.indexOf(marker);
+    if (markerIndex < 0) {
+      throw CoreError("抖音分类数据解析失败");
+    }
+    final arrayStart = html.indexOf("[", markerIndex);
+    if (arrayStart < 0) {
+      throw CoreError("抖音分类数据解析失败");
+    }
+    final escapedArray = _extractEscapedJsonArray(html, arrayStart);
+    final normalizedJson = '{"categoryData":$escapedArray}'
+        .replaceAll(r'\"', '"')
+        .replaceAll(r"\/", "/")
+        .replaceAll(r"\\", "\\");
+    return json.decode(normalizedJson) as Map<String, dynamic>;
+  }
+
+  String _extractEscapedJsonArray(String source, int startIndex) {
+    final buffer = StringBuffer();
+    var depth = 0;
+    var inString = false;
+    var escaped = false;
+    for (var i = startIndex; i < source.length; i++) {
+      final char = source[i];
+      buffer.write(char);
+      if (escaped) {
+        escaped = false;
+        continue;
+      }
+      if (char == "\\") {
+        escaped = true;
+        continue;
+      }
+      if (char == '"') {
+        inString = !inString;
+        continue;
+      }
+      if (inString) {
+        continue;
+      }
+      if (char == "[") {
+        depth += 1;
+      } else if (char == "]") {
+        depth -= 1;
+        if (depth == 0) {
+          return buffer.toString();
+        }
+      }
+    }
+    throw CoreError("抖音分类数据解析失败");
+  }
+
+  List _resolveCategoryRoomData(dynamic result) {
+    if (result is Map && result["status_code"] == 444) {
+      throw CoreError("", statusCode: 444);
+    }
+    if (result is! Map) {
+      throw CoreError("抖音分类接口返回异常");
+    }
+    final data = result["data"];
+    if (data is! Map) {
+      throw CoreError("抖音分类接口返回异常，可能已触发访问限制");
+    }
+    final rooms = data["data"];
+    if (rooms is! List) {
+      throw CoreError("抖音分类接口返回异常，可能已触发访问限制");
+    }
+    return rooms;
   }
 
   @override
@@ -161,9 +230,10 @@ class DouyinSite implements LiveSite {
       header: await getRequestHeaders(),
     );
 
-    var hasMore = (result["data"]["data"] as List).length >= 15;
+    final roomData = _resolveCategoryRoomData(result);
+    var hasMore = roomData.length >= 15;
     var items = <LiveRoomItem>[];
-    for (var item in result["data"]["data"]) {
+    for (var item in roomData) {
       var roomItem = LiveRoomItem(
         roomId: item["web_rid"],
         title: item["room"]["title"].toString(),
@@ -216,9 +286,10 @@ class DouyinSite implements LiveSite {
       header: await getRequestHeaders(),
     );
 
-    var hasMore = (result["data"]["data"] as List).length >= 15;
+    final roomData = _resolveCategoryRoomData(result);
+    var hasMore = roomData.length >= 15;
     var items = <LiveRoomItem>[];
-    for (var item in result["data"]["data"]) {
+    for (var item in roomData) {
       var roomItem = LiveRoomItem(
         roomId: item["web_rid"],
         title: item["room"]["title"].toString(),
@@ -428,7 +499,7 @@ class DouyinSite implements LiveSite {
   Future<String> _getWebCookie(String webRid) async {
     var headResp = await HttpClient.instance.head(
       "https://live.douyin.com/$webRid",
-      header: headers,
+      header: await getRequestHeaders(),
     );
     var dyCookie = "";
     headResp.headers["set-cookie"]?.forEach((element) {
@@ -686,7 +757,7 @@ class DouyinSite implements LiveSite {
     var requlestUrl = uri.toString();
     var headResp = await HttpClient.instance.head(
       'https://live.douyin.com',
-      header: headers,
+      header: await getRequestHeaders(includeFullCookie: true),
     );
     var dyCookie = "";
     headResp.headers["set-cookie"]?.forEach((element) {
