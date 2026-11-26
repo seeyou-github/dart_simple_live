@@ -92,13 +92,17 @@ class BiliBiliSite implements LiveSite {
     LiveSubCategory category, {
     int page = 1,
   }) async {
-    const baseUrl =
-        "https://api.live.bilibili.com/xlive/web-interface/v1/second/getList";
+    // 分类列表改用 room/v1/Area/getRoomList：该接口不需要 w_webid 和 WBI 签名，
+    // 避免 second/getList 因 w_webid 校验失败返回 -352。
+    const baseUrl = "https://api.live.bilibili.com/room/v1/Area/getRoomList";
 
-    var url =
-        "$baseUrl?platform=web&parent_area_id=${category.parentId}&area_id=${category.id}&sort_type=&page=$page&w_webid=${await getAccessId()}";
-
-    var queryParams = await getWbiSign(url);
+    var queryParams = <String, dynamic>{
+      "platform": "web",
+      "parent_area_id": category.parentId,
+      "area_id": category.id,
+      "page": page,
+      "page_size": 30,
+    };
 
     var result = await HttpClient.instance.getJson(
       baseUrl,
@@ -112,14 +116,17 @@ class BiliBiliSite implements LiveSite {
       queryParameters: queryParams,
     );
     var data = result is Map ? result["data"] : null;
-    if (data is! Map || data["list"] is! List) {
+    if (data is! List) {
       return _getCategoryRoomsByArea(
         category,
         page: page,
         previousResponse: result,
       );
     }
-    return _parseCategoryResult(data, category);
+    return _parseCategoryResult(
+      {"list": data, "has_more": data.length >= 30},
+      category,
+    );
   }
 
   Future<LiveCategoryResult> _getCategoryRoomsByArea(
