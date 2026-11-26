@@ -10,6 +10,27 @@ class HomeListController extends BasePageController<LiveRoomItem> {
   /// 当前选中的分类，null 表示显示推荐流
   var selectedCategory = Rxn<LiveSubCategory>();
 
+  /// 回到"主页"：显示默认的推荐直播列表
+  Future<void> selectHome() async {
+    if (selectedCategory.value == null) {
+      return;
+    }
+    selectedCategory.value = null;
+    await reloadFirstPage();
+  }
+
+  /// 选中某个分类（弹框选择时使用，不做"再点一次取消"的切换）
+  Future<void> selectCategory(LiveSubCategory category) async {
+    var current = selectedCategory.value;
+    if (current != null &&
+        current.id == category.id &&
+        current.parentId == category.parentId) {
+      return;
+    }
+    selectedCategory.value = category;
+    await reloadFirstPage();
+  }
+
   /// 点击分类栏：选中该分类；再次点击已选中的分类则回到推荐流
   Future<void> toggleCategory(LiveSubCategory category) async {
     var current = selectedCategory.value;

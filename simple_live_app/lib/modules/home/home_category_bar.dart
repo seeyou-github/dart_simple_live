@@ -142,7 +142,7 @@ class _HomeCategoryBarState extends State<HomeCategoryBar> {
         });
       },
       onSelect: (category) {
-        controller.toggleCategory(category);
+        controller.selectCategory(category);
       },
     );
   }
@@ -161,9 +161,13 @@ class _HomeCategoryBarState extends State<HomeCategoryBar> {
               child: ListView.builder(
                 scrollDirection: Axis.horizontal,
                 padding: const EdgeInsets.only(left: 12),
-                itemCount: pinned.length,
+                // 索引 0 固定为"主页"，其后为用户固定的分类
+                itemCount: pinned.length + 1,
                 itemBuilder: (context, index) {
-                  return _buildChip(context, pinned[index]);
+                  if (index == 0) {
+                    return _buildHomeChip(context);
+                  }
+                  return _buildChip(context, pinned[index - 1]);
                 },
               ),
             ),
@@ -188,6 +192,55 @@ class _HomeCategoryBarState extends State<HomeCategoryBar> {
         ],
       ),
     );
+  }
+
+  /// 分类栏第一个固定项"主页"：显示默认推荐直播列表，不可取消固定
+  Widget _buildHomeChip(BuildContext context) {
+    var colorScheme = Theme.of(context).colorScheme;
+    return Obx(() {
+      // 未选中任何分类即为"主页"
+      var isSelected = controller.selectedCategory.value == null;
+      return Padding(
+        padding: const EdgeInsets.only(right: 8),
+        child: GestureDetector(
+          onTap: controller.selectHome,
+          child: Container(
+            alignment: Alignment.center,
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            decoration: BoxDecoration(
+              color: isSelected
+                  ? colorScheme.primary.withAlpha(38)
+                  : Colors.transparent,
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  Icons.home_rounded,
+                  size: 15,
+                  color: isSelected
+                      ? colorScheme.primary
+                      : colorScheme.onSurfaceVariant,
+                ),
+                const SizedBox(width: 4),
+                Text(
+                  "主页",
+                  maxLines: 1,
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
+                    color: isSelected
+                        ? colorScheme.primary
+                        : colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    });
   }
 
   Widget _buildChip(BuildContext context, PinnedCategory item) {
