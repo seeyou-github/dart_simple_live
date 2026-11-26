@@ -266,7 +266,13 @@ class BiliBiliSite implements LiveSite {
     var areaId = item["area_id"]?.toString();
     var parentAreaId = (item["parent_area_id"] ?? item["parent_id"])
         ?.toString();
-    if (areaId != null && areaId.isNotEmpty && areaId != category.id) {
+    // "全部网游"/"全部手游"等聚合分区的 area_id 为 0，
+    // 接口返回的是该父分区下所有子分区房间，不能按 area_id 精确匹配，只校验父级。
+    var isAggregate = category.id == "0" || category.id.isEmpty;
+    if (!isAggregate &&
+        areaId != null &&
+        areaId.isNotEmpty &&
+        areaId != category.id) {
       return false;
     }
     if (parentAreaId != null &&
