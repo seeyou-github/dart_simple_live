@@ -15,6 +15,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:simple_live_app/app/app_style.dart';
 import 'package:simple_live_app/app/controller/app_settings_controller.dart';
 import 'package:simple_live_app/app/log.dart';
+import 'package:simple_live_app/app/single_instance.dart';
 import 'package:simple_live_app/app/utils.dart';
 import 'package:simple_live_app/app/utils/listen_fourth_button.dart';
 import 'package:simple_live_app/models/db/follow_user.dart';
@@ -40,6 +41,11 @@ import 'package:simple_live_app/app/app_dirs.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  // 桌面端单例：若已有实例在运行，则唤醒其窗口并让当前进程退出
+  if (await SingleInstance.instance.ensureSingle()) {
+    exit(0);
+    return;
+  }
   await migrateData();
   await initWindow();
   MediaKit.ensureInitialized();
