@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
@@ -5,6 +6,8 @@ import 'dart:math';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
+import 'package:simple_live_app/app/constant.dart';
+import 'package:simple_live_app/app/event_bus.dart';
 import 'package:simple_live_app/app/sites.dart';
 import 'package:simple_live_app/modules/home/home_list_controller.dart';
 import 'package:simple_live_app/services/local_storage_service.dart';
@@ -56,54 +59,92 @@ class PinnedCategory {
 
 /// 固定分类的本地存储：按站点存一份 JSON。
 class PinnedCategoryStore {
-  static List<PinnedCategory> load(String siteId) {
+  /// 读取原始存储（站点 id -> 分类列表的 JSON）
+  static Map<String, dynamic> _readAll() {
     try {
       var raw = LocalStorageService.instance.getValue<String>(
         LocalStorageService.kPinnedCategories,
         "",
       );
       if (raw.trim().isEmpty) {
-        return [];
+        return {};
       }
       var decoded = jsonDecode(raw);
       if (decoded is! Map) {
-        return [];
+        return {};
       }
-      var list = decoded[siteId];
-      if (list is! List) {
-        return [];
-      }
-      return list
-          .whereType<Map>()
-          .map((e) => PinnedCategory.fromJson(Map<String, dynamic>.from(e)))
-          .where((e) => e.categoryId.isNotEmpty)
-          .toList();
+      return Map<String, dynamic>.from(decoded);
     } catch (e) {
-      return [];
+      return {};
     }
   }
 
-  static Future<void> save(String siteId, List<PinnedCategory> list) async {
-    Map<String, dynamic> all = {};
-    try {
-      var raw = LocalStorageService.instance.getValue<String>(
-        LocalStorageService.kPinnedCategories,
-        "",
-      );
-      if (raw.trim().isNotEmpty) {
-        var decoded = jsonDecode(raw);
-        if (decoded is Map) {
-          all = Map<String, dynamic>.from(decoded);
-        }
-      }
-    } catch (e) {
-      all = {};
+  static List<PinnedCategory> _parse(dynamic list) {
+    if (list is! List) {
+      return [];
     }
-    all[siteId] = list.map((e) => e.toJson()).toList();
+    return list
+        .whereType<Map>()
+        .map((e) => PinnedCategory.fromJson(Map<String, dynamic>.from(e)))
+        .where((e) => e.categoryId.isNotEmpty)
+        .toList();
+  }
+
+  static Future<void> _writeAll(Map<String, dynamic> all) async {
     await LocalStorageService.instance.setValue(
       LocalStorageService.kPinnedCategories,
       jsonEncode(all),
     );
+  }
+
+  static List<PinnedCategory> load(String siteId) {
+    return _parse(_readAll()[siteId]);
+  }
+
+  static Future<void> save(String siteId, List<PinnedCategory> list) async {
+    var all = _readAll();
+    all[siteId] = list.map((e) => e.toJson()).toList();
+    await _writeAll(all);
+  }
+
+  /// 读取所有站点的固定分类（用于备份 / 同步）
+  static Map<String, List<PinnedCategory>> loadAll() {
+    var all = _readAll();
+    var result = <String, List<PinnedCategory>>{};
+    for (var entry in all.entries) {
+      var list = _parse(entry.value);
+      if (list.isNotEmpty) {
+        result[entry.key] = list;
+      }
+    }
+    return result;
+  }
+
+  /// 写入所有站点的固定分类。
+  /// [overlay] 为 true 时覆盖本地；否则按站点合并去重。
+  static Future<void> saveAll(
+    Map<String, List<PinnedCategory>> data, {
+    bool overlay = false,
+  }) async {
+    var all = overlay ? <String, dynamic>{} : _readAll();
+    for (var entry in data.entries) {
+      var list = entry.value;
+      if (overlay) {
+        all[entry.key] = list.map((e) => e.toJson()).toList();
+        continue;
+      }
+      var merged = <PinnedCategory>[..._parse(all[entry.key])];
+      for (var item in list) {
+        var exists = merged.any(
+          (e) => e.categoryId == item.categoryId && e.parentId == item.parentId,
+        );
+        if (!exists) {
+          merged.add(item);
+        }
+      }
+      all[entry.key] = merged.map((e) => e.toJson()).toList();
+    }
+    await _writeAll(all);
   }
 }
 
@@ -121,11 +162,30 @@ class _HomeCategoryBarState extends State<HomeCategoryBar> {
   HomeListController get controller =>
       Get.find<HomeListController>(tag: widget.tag);
   List<PinnedCategory> pinned = [];
+  StreamSubscription? _syncSubscription;
 
   @override
   void initState() {
     super.initState();
     pinned = PinnedCategoryStore.load(controller.site.id);
+    // 备份恢复 / 设备同步后刷新分类栏
+    _syncSubscription = EventBus.instance.listen(
+      Constant.kUpdatePinnedCategories,
+      (_) {
+        if (!mounted) {
+          return;
+        }
+        setState(() {
+          pinned = PinnedCategoryStore.load(controller.site.id);
+        });
+      },
+    );
+  }
+
+  @override
+  void dispose() {
+    _syncSubscription?.cancel();
+    super.dispose();
   }
 
   Future<void> openPicker() async {

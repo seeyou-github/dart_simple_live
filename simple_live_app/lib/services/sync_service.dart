@@ -13,6 +13,7 @@ import 'package:simple_live_app/app/utils.dart';
 import 'package:simple_live_app/models/db/follow_user.dart';
 import 'package:simple_live_app/models/db/follow_user_tag.dart';
 import 'package:simple_live_app/models/db/history.dart';
+import 'package:simple_live_app/modules/home/home_category_bar.dart';
 import 'package:simple_live_app/services/bilibili_account_service.dart';
 import 'package:simple_live_app/services/db_service.dart';
 import 'package:udp/udp.dart';
@@ -191,6 +192,7 @@ class SyncService extends GetxService {
       serverRouter.post('/sync/history', _syncHistoryReuqest);
       serverRouter.post('/sync/blocked_word', _syncBlockedWordReuqest);
       serverRouter.post('/sync/account/bilibili', _syncBiliAccountReuqest);
+      serverRouter.post('/sync/category', _syncPinnedCategoryRequest);
 
       var server = await shelf_io.serve(
         serverRouter,
@@ -354,6 +356,41 @@ class SyncService extends GetxService {
       BiliBiliAccountService.instance.setCookie(cookie);
       BiliBiliAccountService.instance.loadUserInfo();
       SmartDialog.showToast('已同步哔哩哔哩账号');
+      return toJsonResponse({'status': true, 'message': 'success'});
+    } catch (e) {
+      return toJsonResponse({'status': false, 'message': e.toString()});
+    }
+  }
+
+  /// 同步主页分类栏（用户固定的分类）
+  Future<shelf.Response> _syncPinnedCategoryRequest(
+    shelf.Request request,
+  ) async {
+    try {
+      var overlay = int.parse(
+        request.requestedUri.queryParameters['overlay'] ?? '0',
+      );
+      var body = await request.readAsString();
+      Log.d('_syncPinnedCategoryRequest: $body');
+      var jsonBody = json.decode(body);
+      var data = <String, List<PinnedCategory>>{};
+      if (jsonBody is Map) {
+        for (var entry in jsonBody.entries) {
+          var list = entry.value;
+          if (list is! List) {
+            continue;
+          }
+          data[entry.key.toString()] = list
+              .whereType<Map>()
+              .map((e) => PinnedCategory.fromJson(Map<String, dynamic>.from(e)))
+              .where((e) => e.categoryId.isNotEmpty)
+              .toList();
+        }
+      }
+      await PinnedCategoryStore.saveAll(data, overlay: overlay == 1);
+
+      SmartDialog.showToast('已同步分类栏');
+      EventBus.instance.emit(Constant.kUpdatePinnedCategories, 0);
       return toJsonResponse({'status': true, 'message': 'success'});
     } catch (e) {
       return toJsonResponse({'status': false, 'message': e.toString()});

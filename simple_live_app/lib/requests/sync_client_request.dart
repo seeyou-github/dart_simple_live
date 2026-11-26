@@ -94,6 +94,28 @@ class SyncClientRequest {
     }
   }
 
+  /// 同步主页分类栏（用户固定的分类）
+  Future<bool> syncPinnedCategories(
+    SyncClinet client,
+    dynamic body, {
+    bool overlay = false,
+  }) async {
+    var url = "http://${client.address}:${client.port}/sync/category";
+    var data = await HttpClient.instance.postJson(
+      url,
+      data: body,
+      queryParameters: {
+        'overlay': overlay ? '1' : '0',
+      },
+    );
+
+    if (data["status"]) {
+      return true;
+    } else {
+      throw data["message"];
+    }
+  }
+
   Future<bool> syncBiliAccount(SyncClinet client, String cookie) async {
     var url = "http://${client.address}:${client.port}/sync/account/bilibili";
     var data = await HttpClient.instance.postJson(

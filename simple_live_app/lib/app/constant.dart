@@ -5,6 +5,9 @@ class Constant {
   static const String kUpdateFollow = "UpdateFollow";
   static const String kUpdateHistory = "UpdateHistory";
 
+  /// 主页分类栏固定分类发生变化（备份恢复 / 设备同步）
+  static const String kUpdatePinnedCategories = "UpdatePinnedCategories";
+
   static final Map<String, HomePageItem> allHomePages = {
     "recommend": HomePageItem(
       iconData: Remix.home_smile_line,

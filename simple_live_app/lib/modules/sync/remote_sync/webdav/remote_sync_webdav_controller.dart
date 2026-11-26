@@ -326,6 +326,8 @@ class RemoteSyncWebDAVController extends BaseController {
         try {
           await LocalStorageService.instance.settingsBox.clear();
           LocalStorageService.instance.settingsBox.putAll(jsonData);
+          // 主页分类栏的固定分类存在设置里，恢复后通知界面刷新
+          EventBus.instance.emit(Constant.kUpdatePinnedCategories, 0);
           Log.i('已同步用户设置');
         } catch (e) {
           Log.e("同步用户设置失败：$e", StackTrace.current);

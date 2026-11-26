@@ -6,6 +6,7 @@ import 'package:simple_live_app/app/controller/base_controller.dart';
 import 'package:simple_live_app/app/log.dart';
 import 'package:simple_live_app/app/utils.dart';
 import 'package:simple_live_app/models/sync_client_info_model.dart';
+import 'package:simple_live_app/modules/home/home_category_bar.dart';
 import 'package:simple_live_app/requests/sync_client_request.dart';
 import 'package:simple_live_app/services/bilibili_account_service.dart';
 import 'package:simple_live_app/services/db_service.dart';
@@ -71,6 +72,24 @@ class SyncDeviceController extends BaseController {
       var data = json.encode(shieldList.toList());
       await request.syncBlockedWord(client, data, overlay: overlay);
       SmartDialog.showToast("已同步屏蔽词");
+    } catch (e) {
+      SmartDialog.showToast("同步失败:$e");
+      Log.logPrint(e);
+    } finally {
+      SmartDialog.dismiss();
+    }
+  }
+
+  void syncPinnedCategories() async {
+    try {
+      var overlay = await showOverlayDialog();
+      SmartDialog.showLoading(msg: "同步中...");
+      var data = <String, dynamic>{};
+      PinnedCategoryStore.loadAll().forEach((siteId, list) {
+        data[siteId] = list.map((e) => e.toJson()).toList();
+      });
+      await request.syncPinnedCategories(client, data, overlay: overlay);
+      SmartDialog.showToast("已同步分类栏");
     } catch (e) {
       SmartDialog.showToast("同步失败:$e");
       Log.logPrint(e);
