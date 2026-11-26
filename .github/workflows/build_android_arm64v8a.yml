@@ -1,0 +1,58 @@
+name: build_android_arm64v8a
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build_android_arm64v8a_release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout master
+        uses: actions/checkout@v4
+        with:
+          ref: master
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: "zulu"
+          java-version: "17"
+          cache: "gradle"
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "3.38.x"
+          cache: true
+
+      - name: Restore packages
+        run: |
+          cd simple_live_app
+          flutter pub get
+
+      - name: Build Android arm64-v8a release APK
+        run: |
+          cd simple_live_app
+          flutter build apk --release --target-platform android-arm64 --split-per-abi
+
+      - name: Upload Android arm64-v8a APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: simple_live_android_arm64v8a_release
+          path: simple_live_app/build/app/outputs/flutter-apk/app-arm64-v8a-release.apk
+          retention-days: 1
+          if-no-files-found: error
+
+      - name: Write build summary
+        shell: bash
+        run: |
+          {
+            echo "## Android arm64-v8a release build"
+            echo ""
+            echo "- Artifact: \`simple_live_android_arm64v8a_release\`"
+            echo "- Retention: 1 day"
+          } >> "$GITHUB_STEP_SUMMARY"

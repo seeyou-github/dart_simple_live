@@ -1,4 +1,4 @@
-name: build_windows_x64_zip_tmpfile
+name: build_windows_x64_zip
 
 on:
   workflow_dispatch:
@@ -8,7 +8,7 @@ permissions:
   contents: read
 
 jobs:
-  build_windows_x64_zip_release_tmpfile:
+  build_windows_x64_zip_release:
     runs-on: windows-latest
 
     steps:
@@ -61,26 +61,18 @@ jobs:
           "zip_path=$zipPath" >> $env:GITHUB_OUTPUT
           "zip_name=$(Split-Path -Path $zipPath -Leaf)" >> $env:GITHUB_OUTPUT
 
-      - name: Upload Windows x64 release zip to tmpfile.link
+      - name: Upload Windows x64 release zip
+        uses: actions/upload-artifact@v4
+        with:
+          name: simple_live_windows_x64_release
+          path: ${{ steps.package.outputs.zip_path }}
+          retention-days: 1
+          if-no-files-found: error
+
+      - name: Write build summary
         shell: pwsh
         run: |
-          $ErrorActionPreference = 'Stop'
-          $zipPath = '${{ steps.package.outputs.zip_path }}'
-          $zipName = '${{ steps.package.outputs.zip_name }}'
-
-          if (-not (Test-Path -LiteralPath $zipPath -PathType Leaf)) {
-            throw "Upload file not found: $zipPath"
-          }
-
-          $response = curl.exe -sS -X POST -F "file=@$zipPath" https://tmpfile.link/api/upload
-          Write-Host $response
-          $json = $response | ConvertFrom-Json
-          if (-not $json.downloadLinkEncoded) {
-            throw "tmpfile.link upload failed: $response"
-          }
-
           "## Windows x64 release build" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
           "" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
-          "- File: ``$zipName``" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
-          "- Download: $($json.downloadLinkEncoded)" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
-          "- Retention: tmpfile.link anonymous uploads are deleted after 7 days." | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
+          "- Artifact: ``simple_live_windows_x64_release``" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
+          "- Retention: 1 day" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
