@@ -56,16 +56,15 @@ class FollowUserController extends BasePageController<FollowUser> {
     if (page > 1) {
       return Future.value([]);
     }
-    if (filterMode.value.tag == "全部") {
-      return FollowService.instance.followList.value;
-    } else if (filterMode.value.tag == "直播中") {
-      return FollowService.instance.liveList.value;
-    } else if (filterMode.value.tag == "未开播") {
-      return FollowService.instance.notLiveList.value;
-    } else {
-      FollowService.instance.filterDataByTag(filterMode.value);
-      return FollowService.instance.curTagFollowList.value;
-    }
+    // 不分类，默认显示所有关注主播，直播中的置顶。
+    return _sortedAllFollowList();
+  }
+
+  /// 所有关注主播，按直播状态排序（直播中在前）。
+  List<FollowUser> _sortedAllFollowList() {
+    var result = List<FollowUser>.from(FollowService.instance.followList);
+    result.sort((a, b) => b.liveStatus.value.compareTo(a.liveStatus.value));
+    return result;
   }
 
   void updateTagList() {
@@ -79,21 +78,7 @@ class FollowUserController extends BasePageController<FollowUser> {
   }
 
   void filterData() {
-    if (filterMode.value.tag == "全部") {
-      list.assignAll(FollowService.instance.followList.value);
-    } else if (filterMode.value.tag == "直播中") {
-      list.assignAll(FollowService.instance.liveList.value);
-    } else if (filterMode.value.tag == "未开播") {
-      list.assignAll(FollowService.instance.notLiveList.value);
-    } else {
-      FollowService.instance.filterDataByTag(filterMode.value);
-      list.assignAll(FollowService.instance.curTagFollowList);
-    }
-  }
-
-  void setFilterMode(FollowUserTag tag) {
-    filterMode.value = tag;
-    filterData();
+    list.assignAll(_sortedAllFollowList());
   }
 
   void removeItem(FollowUser item) async {
