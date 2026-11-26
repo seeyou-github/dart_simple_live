@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'package:get/get.dart';
 import 'package:simple_live_app/app/app_style.dart';
+import 'package:simple_live_app/modules/home/home_category_bar.dart';
 import 'package:simple_live_app/modules/home/home_list_controller.dart';
 import 'package:simple_live_app/widgets/keep_alive_wrapper.dart';
 import 'package:simple_live_app/widgets/live_room_card.dart';
@@ -18,17 +19,24 @@ class HomeListView extends StatelessWidget {
       c = 2;
     }
     return KeepAliveWrapper(
-      child: PageGridView(
-        pageController: controller,
-        padding: AppStyle.edgeInsetsA12,
-        firstRefresh: true,
-        mainAxisSpacing: 12,
-        crossAxisSpacing: 12,
-        crossAxisCount: c,
-        itemBuilder: (_, i) {
-          var item = controller.list[i];
-          return LiveRoomCard(controller.site, item);
-        },
+      child: Column(
+        children: [
+          HomeCategoryBar(tag: tag),
+          Expanded(
+            child: PageGridView(
+              pageController: controller,
+              padding: AppStyle.edgeInsetsA12,
+              firstRefresh: true,
+              mainAxisSpacing: 12,
+              crossAxisSpacing: 12,
+              crossAxisCount: c,
+              itemBuilder: (_, i) {
+                var item = controller.list[i];
+                return LiveRoomCard(controller.site, item);
+              },
+            ),
+          ),
+        ],
       ),
     );
   }

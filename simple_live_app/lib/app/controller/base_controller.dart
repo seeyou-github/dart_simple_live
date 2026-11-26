@@ -123,6 +123,21 @@ class BasePageController<T> extends BaseController {
     await loadData();
   }
 
+  /// 重新加载第一页数据，不受刷新冷却限制（用于切换分类等主动操作）。
+  Future reloadFirstPage() async {
+    // 若上一次加载尚未结束，稍等它完成，避免被 loadding 直接挡回。
+    var waited = 0;
+    while (loadding && waited < 3000) {
+      await Future.delayed(const Duration(milliseconds: 100));
+      waited += 100;
+    }
+    currentPage = 1;
+    list.value = [];
+    pageEmpty.value = false;
+    pageError.value = false;
+    await loadData();
+  }
+
   Future loadData() async {
     try {
       if (loadding) return;

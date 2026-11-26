@@ -142,7 +142,6 @@ class LiveRoomPage extends GetView<LiveRoomController> {
         ),
         buildUserProfile(context),
         buildMessageArea(),
-        buildBottomActions(context),
       ],
     );
   }
@@ -164,76 +163,6 @@ class LiveRoomPage extends GetView<LiveRoomController> {
                     buildMessageArea(),
                   ],
                 ),
-              ),
-            ],
-          ),
-        ),
-        Container(
-          decoration: BoxDecoration(
-            color: Theme.of(context).cardColor,
-            border: Border(
-              top: BorderSide(
-                color: Colors.grey.withAlpha(25),
-              ),
-            ),
-          ),
-          padding: AppStyle.edgeInsetsV4.copyWith(
-            bottom: AppStyle.bottomBarHeight + 4,
-          ),
-          child: Row(
-            children: [
-              TextButton.icon(
-                style: TextButton.styleFrom(
-                  textStyle: const TextStyle(fontSize: 14),
-                ),
-                onPressed: controller.refreshRoom,
-                icon: const Icon(Remix.refresh_line),
-                label: const Text("刷新"),
-              ),
-              AppStyle.hGap4,
-              Obx(
-                () => controller.followed.value
-                    ? TextButton.icon(
-                        style: TextButton.styleFrom(
-                          textStyle: const TextStyle(fontSize: 14),
-                        ),
-                        onPressed: controller.removeFollowUser,
-                        icon: const Icon(Remix.heart_fill),
-                        label: const Text("取消关注"),
-                      )
-                    : TextButton.icon(
-                        style: TextButton.styleFrom(
-                          textStyle: const TextStyle(fontSize: 14),
-                        ),
-                        onPressed: controller.followUser,
-                        icon: const Icon(Remix.heart_line),
-                        label: const Text("关注"),
-                      ),
-              ),
-              const Expanded(child: Center()),
-              TextButton.icon(
-                style: TextButton.styleFrom(
-                  textStyle: const TextStyle(fontSize: 14),
-                ),
-                onPressed: controller.share,
-                icon: const Icon(Remix.share_line),
-                label: const Text("分享"),
-              ),
-              TextButton.icon(
-                style: TextButton.styleFrom(
-                  textStyle: const TextStyle(fontSize: 14),
-                ),
-                onPressed: controller.copyUrl,
-                icon: const Icon(Remix.file_copy_line),
-                label: const Text("复制链接"),
-              ),
-              TextButton.icon(
-                style: TextButton.styleFrom(
-                  textStyle: const TextStyle(fontSize: 14),
-                ),
-                onPressed: controller.copyPlayUrl,
-                icon: const Icon(Remix.file_copy_line),
-                label: const Text("复制播放直链"),
               ),
             ],
           ),
@@ -373,65 +302,6 @@ class LiveRoomPage extends GetView<LiveRoomController> {
             ),
           ],
         ),
-      ),
-    );
-  }
-
-  Widget buildBottomActions(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: Theme.of(context).cardColor,
-        border: Border(
-          top: BorderSide(
-            color: Colors.grey.withAlpha(25),
-          ),
-        ),
-      ),
-      padding: EdgeInsets.only(bottom: AppStyle.bottomBarHeight),
-      child: Row(
-        children: [
-          Expanded(
-            child: Obx(
-              () => controller.followed.value
-                  ? TextButton.icon(
-                      style: TextButton.styleFrom(
-                        textStyle: const TextStyle(fontSize: 14),
-                      ),
-                      onPressed: controller.removeFollowUser,
-                      icon: const Icon(Remix.heart_fill),
-                      label: const Text("取消关注"),
-                    )
-                  : TextButton.icon(
-                      style: TextButton.styleFrom(
-                        textStyle: const TextStyle(fontSize: 14),
-                      ),
-                      onPressed: controller.followUser,
-                      icon: const Icon(Remix.heart_line),
-                      label: const Text("关注"),
-                    ),
-            ),
-          ),
-          Expanded(
-            child: TextButton.icon(
-              style: TextButton.styleFrom(
-                textStyle: const TextStyle(fontSize: 14),
-              ),
-              onPressed: controller.refreshRoom,
-              icon: const Icon(Remix.refresh_line),
-              label: const Text("刷新"),
-            ),
-          ),
-          Expanded(
-            child: TextButton.icon(
-              style: TextButton.styleFrom(
-                textStyle: const TextStyle(fontSize: 14),
-              ),
-              onPressed: controller.share,
-              icon: const Icon(Remix.share_line),
-              label: const Text("分享"),
-            ),
-          ),
-        ],
       ),
     );
   }

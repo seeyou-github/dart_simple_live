@@ -171,6 +171,9 @@ class LocalStorageService extends GetxService {
   /// 用户手动调整后的窗口大小（仅尺寸，不含最大化/最小化状态）
   static const String kWindowSize = "WindowSize";
 
+  /// 主页分类栏中用户固定的分类（按站点存 JSON）
+  static const String kPinnedCategories = "PinnedCategories";
+
   late Box settingsBox;
   late Box<String> shieldBox;
 

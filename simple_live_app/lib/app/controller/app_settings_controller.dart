@@ -185,7 +185,10 @@ class AppSettingsController extends GetxController {
           LocalStorageService.kHomeSort,
           Constant.allHomePages.keys.join(","),
         )
-        .split(",");
+        .split(",")
+        // 过滤掉已经被移除的旧页面（如已删除的"分类"页），避免取不到配置崩溃
+        .where((key) => Constant.allHomePages.containsKey(key))
+        .toList();
     //如果数量与allSites的数量不一致，将缺失的添加上
     if (sort.length != Constant.allHomePages.length) {
       var keys = Constant.allHomePages.keys.toList();
