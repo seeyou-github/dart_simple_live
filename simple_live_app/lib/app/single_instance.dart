@@ -22,8 +22,11 @@ class SingleInstance {
   ServerSocket? _server;
 
   /// 返回 true 表示已有实例在运行，当前进程应直接退出。
+  ///
+  /// Windows 端由原生 runner（windows/runner/main.cpp 的命名互斥体）处理，
+  /// 这里只负责 macOS / Linux。
   Future<bool> ensureSingle() async {
-    if (!(Platform.isWindows || Platform.isMacOS || Platform.isLinux)) {
+    if (!(Platform.isMacOS || Platform.isLinux)) {
       return false;
     }
     if (await _notifyRunning()) {

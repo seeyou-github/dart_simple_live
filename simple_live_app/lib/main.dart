@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
@@ -41,7 +42,8 @@ import 'package:simple_live_app/app/app_dirs.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  // 桌面端单例：若已有实例在运行，则唤醒其窗口并让当前进程退出
+  // 桌面端单例：Windows 由原生 runner 的命名互斥体处理，
+  // macOS / Linux 走这里的端口探测；若已有实例则唤醒其窗口并退出
   if (await SingleInstance.instance.ensureSingle()) {
     exit(0);
     return;
@@ -54,9 +56,10 @@ void main() async {
         ? (await AppDirs.appDataDirectory()).path
         : null,
   );
-  //初始化服务
-  await initServices();
-  //桌面端：注册窗口大小监听并恢复上次手动调整的尺寸
+  // 只初始化窗口尺寸恢复所需的最小服务，随后立刻显示启动页，
+  // 其余服务在启动页显示后再初始化，避免窗口长时间不出现。
+  await initBaseServices();
+  //桌面端：注册窗口大小监听并恢复上次手动调整的尺寸（此时窗口仍隐藏）
   if (Platform.isMacOS || Platform.isWindows || Platform.isLinux) {
     windowManager.addListener(_windowSizeListener);
     await restoreWindowSize();
@@ -69,9 +72,8 @@ void main() async {
     systemNavigationBarColor: Colors.transparent,
   );
   SystemChrome.setSystemUIOverlayStyle(systemUiOverlayStyle);
-  runApp(const MyApp());
-  // 桌面端：窗口尺寸已在显示前恢复，这里等首帧渲染完成后再显示窗口，
-  // 避免启动瞬间看到默认尺寸的白底窗口再跳动到上次的尺寸
+  // 先渲染启动页，首帧上屏后再显示窗口，正式界面在服务就绪后接替
+  runApp(const AppBootstrap());
   unawaited(showWindowAfterFirstFrame());
 }
 
@@ -235,16 +237,12 @@ Future initWindow() async {
   });
 }
 
-/// 桌面端：等待首帧渲染完成后再显示窗口，避免白屏和尺寸跳变
+/// 桌面端：等首帧真正上屏后再显示窗口，避免出现一帧白色背景
 Future<void> showWindowAfterFirstFrame() async {
   if (!(Platform.isMacOS || Platform.isWindows || Platform.isLinux)) {
     return;
   }
-  try {
-    await WidgetsBinding.instance.endOfFrame;
-  } catch (e) {
-    Log.logPrint(e);
-  }
+  await _waitFirstFrameRasterized();
   try {
     await windowManager.show();
     await windowManager.focus();
@@ -253,7 +251,30 @@ Future<void> showWindowAfterFirstFrame() async {
   }
 }
 
-Future initServices() async {
+/// 等待首帧完成栅格化（FrameTiming 回调晚于 build 完成，更接近真正上屏）
+Future<void> _waitFirstFrameRasterized() async {
+  var completer = Completer<void>();
+  void onTimings(List<FrameTiming> timings) {
+    if (!completer.isCompleted) {
+      completer.complete();
+    }
+  }
+
+  WidgetsBinding.instance.addTimingsCallback(onTimings);
+  try {
+    await WidgetsBinding.instance.endOfFrame;
+    await completer.future.timeout(
+      const Duration(milliseconds: 200),
+      onTimeout: () {},
+    );
+  } catch (e) {
+    Log.logPrint(e);
+  } finally {
+    WidgetsBinding.instance.removeTimingsCallback(onTimings);
+  }
+}
+
+Future initBaseServices() async {
   Hive.registerAdapter(FollowUserAdapter());
   Hive.registerAdapter(HistoryAdapter());
   Hive.registerAdapter(FollowUserTagAdapter());
@@ -263,6 +284,9 @@ Future initServices() async {
   //本地存储
   Log.d("Init LocalStorage Service");
   await Get.put(LocalStorageService()).init();
+}
+
+Future initServices() async {
   await Get.put(DBService()).init();
   //初始化设置控制器
   Get.put(AppSettingsController());
@@ -301,6 +325,97 @@ void initCoreLog() {
         Log.logPrint(msg);
     }
   };
+}
+
+/// 应用引导：先显示启动页，服务初始化完成后切换到正式界面
+class AppBootstrap extends StatefulWidget {
+  const AppBootstrap({super.key});
+
+  @override
+  State<AppBootstrap> createState() => _AppBootstrapState();
+}
+
+class _AppBootstrapState extends State<AppBootstrap> {
+  var _ready = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _initServices();
+  }
+
+  Future<void> _initServices() async {
+    try {
+      await initServices();
+    } catch (e, stack) {
+      Log.e("初始化服务失败：$e", stack);
+    }
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _ready = true;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return _ready ? const MyApp() : const BootSplash();
+  }
+}
+
+/// 启动页：服务初始化期间先给用户反馈，避免窗口迟迟不出现
+class BootSplash extends StatelessWidget {
+  const BootSplash({super.key});
+
+  bool get _isDark {
+    var mode = LocalStorageService.instance.getValue(
+      LocalStorageService.kThemeMode,
+      0,
+    );
+    if (mode == 2) {
+      return true;
+    }
+    if (mode == 1) {
+      return false;
+    }
+    return WidgetsBinding.instance.platformDispatcher.platformBrightness ==
+        Brightness.dark;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    var dark = _isDark;
+    return MaterialApp(
+      debugShowCheckedModeBanner: false,
+      theme: ThemeData(brightness: dark ? Brightness.dark : Brightness.light),
+      home: Scaffold(
+        backgroundColor:
+            dark ? const Color(0xFF101012) : const Color(0xFFF7F7F9),
+        body: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Image.asset(
+                "assets/images/logo.png",
+                width: 72,
+                height: 72,
+              ),
+              const SizedBox(height: 24),
+              SizedBox(
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: dark ? Colors.white70 : Colors.black38,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 class MyApp extends StatelessWidget {
