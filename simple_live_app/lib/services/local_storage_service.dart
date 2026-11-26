@@ -168,6 +168,9 @@ class LocalStorageService extends GetxService {
   /// WebDAV_最后一次备份时间
   static const String kWebDAVLastRecoverTime = "kWebDAVLastRecoverTime";
 
+  /// 用户手动调整后的窗口大小（仅尺寸，不含最大化/最小化状态）
+  static const String kWindowSize = "WindowSize";
+
   late Box settingsBox;
   late Box<String> shieldBox;
 

@@ -86,11 +86,15 @@ class LiveRoomPage extends GetView<LiveRoomController> {
             ),
           );
         }
-        if (controller.fullScreenState.value) {
+        if (controller.isFullScreenUI) {
           return PopScope(
             canPop: false,
             onPopInvokedWithResult: (e, r) {
-              controller.exitFull();
+              if (controller.windowFullScreenState.value) {
+                controller.exitWindowFullScreen();
+              } else {
+                controller.exitFull();
+              }
             },
             child: Scaffold(
               body: buildMediaPlayer(),

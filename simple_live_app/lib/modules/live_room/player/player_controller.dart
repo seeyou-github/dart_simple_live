@@ -98,8 +98,41 @@ mixin PlayerStateMixin on PlayerMixin {
   /// 是否处于锁定控制器状态
   RxBool lockControlsState = false.obs;
 
-  /// 是否处于全屏状态
+  /// 是否处于全屏状态（桌面端为系统级无边框全屏）
   RxBool fullScreenState = false.obs;
+
+  /// 是否处于窗口全屏（仅视频铺满窗口客户区，不改变系统窗口状态，仅桌面端可用）
+  RxBool windowFullScreenState = false.obs;
+
+  /// 是否应显示全屏播放器 UI（系统全屏 或 窗口全屏）
+  bool get isFullScreenUI => fullScreenState.value || windowFullScreenState.value;
+
+  /// 切换窗口全屏（视频铺满窗口，不改变系统窗口状态）
+  void toggleWindowFullScreen() {
+    if (Platform.isAndroid || Platform.isIOS) {
+      return;
+    }
+    if (windowFullScreenState.value) {
+      exitWindowFullScreen();
+    } else {
+      enterWindowFullScreen();
+    }
+  }
+
+  /// 进入窗口全屏：复用全屏 UI，但不调用系统级全屏接口
+  void enterWindowFullScreen() {
+    if (Platform.isAndroid || Platform.isIOS || smallWindowState.value) {
+      return;
+    }
+    fullScreenState.value = false;
+    windowFullScreenState.value = true;
+    showControls();
+  }
+
+  /// 退出窗口全屏
+  void exitWindowFullScreen() {
+    windowFullScreenState.value = false;
+  }
 
   /// 显示手势Tip
   RxBool showGestureTip = false.obs;
@@ -266,6 +299,7 @@ mixin PlayerSystemMixin on PlayerMixin, PlayerStateMixin, PlayerDanmakuMixin {
 
   /// 进入全屏
   void enterFullScreen() {
+    windowFullScreenState.value = false;
     fullScreenState.value = true;
     if (Platform.isAndroid || Platform.isIOS) {
       //全屏
@@ -302,6 +336,7 @@ mixin PlayerSystemMixin on PlayerMixin, PlayerStateMixin, PlayerDanmakuMixin {
   ///小窗模式()
   void enterSmallWindow() async {
     if (!(Platform.isAndroid || Platform.isIOS)) {
+      windowFullScreenState.value = false;
       fullScreenState.value = true;
       smallWindowState.value = true;
 
@@ -506,7 +541,9 @@ mixin PlayerGestureControlMixin
     if (lockControlsState.value) {
       return;
     }
-    if (fullScreenState.value) {
+    if (windowFullScreenState.value) {
+      exitWindowFullScreen();
+    } else if (fullScreenState.value) {
       exitFull();
     } else {
       enterFullScreen();
@@ -822,6 +859,9 @@ class PlayerController extends BaseController
   @override
   void onClose() async {
     Log.w("播放器关闭");
+    if (windowFullScreenState.value) {
+      exitWindowFullScreen();
+    }
     if (smallWindowState.value) {
       exitSmallWindow();
     }

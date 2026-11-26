@@ -20,6 +20,7 @@ import 'package:simple_live_app/app/utils/listen_fourth_button.dart';
 import 'package:simple_live_app/models/db/follow_user.dart';
 import 'package:simple_live_app/models/db/follow_user_tag.dart';
 import 'package:simple_live_app/models/db/history.dart';
+import 'package:simple_live_app/modules/live_room/live_room_controller.dart';
 import 'package:simple_live_app/modules/other/debug_log_page.dart';
 import 'package:simple_live_app/routes/app_pages.dart';
 import 'package:simple_live_app/routes/route_path.dart';
@@ -49,6 +50,11 @@ void main() async {
   );
   //初始化服务
   await initServices();
+  //桌面端：注册窗口大小监听并恢复上次手动调整的尺寸
+  if (Platform.isMacOS || Platform.isWindows || Platform.isLinux) {
+    windowManager.addListener(_windowSizeListener);
+    await restoreWindowSize();
+  }
   SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
   //设置状态栏为透明
   SystemUiOverlayStyle systemUiOverlayStyle = const SystemUiOverlayStyle(
@@ -99,6 +105,98 @@ Future migrateData() async {
   } catch (e) {
     Log.logPrint(e);
   }
+}
+
+/// 桌面端窗口大小记忆：仅保存用户手动调整的尺寸，
+/// 最大化/最小化/系统全屏/小窗状态均不保存。
+class _WindowSizeListener with WindowListener {
+  Timer? _saveTimer;
+
+  @override
+  void onWindowResized() {
+    _scheduleSave();
+  }
+
+  void _scheduleSave() {
+    _saveTimer?.cancel();
+    _saveTimer = Timer(const Duration(milliseconds: 400), () {
+      unawaited(_saveWindowSize());
+    });
+  }
+
+  Future<void> _saveWindowSize() async {
+    try {
+      // 最大化/最小化/系统全屏时不保存，避免用异常尺寸覆盖用户手动调整的尺寸
+      if (await windowManager.isMaximized() ||
+          await windowManager.isMinimized() ||
+          await windowManager.isFullScreen()) {
+        return;
+      }
+      // 小窗模式下不保存其临时尺寸
+      if (Get.isRegistered<LiveRoomController>() &&
+          Get.find<LiveRoomController>().smallWindowState.value) {
+        return;
+      }
+      var size = await windowManager.getSize();
+      if (size.width < 280 || size.height < 280) {
+        return;
+      }
+      await LocalStorageService.instance.setValue(
+        LocalStorageService.kWindowSize,
+        [size.width, size.height],
+      );
+      Log.d("保存窗口大小：${size.width}x${size.height}");
+    } catch (e) {
+      Log.logPrint(e);
+    }
+  }
+}
+
+final _windowSizeListener = _WindowSizeListener();
+
+/// 恢复用户上次手动调整的窗口大小（不恢复最大化/最小化状态）
+Future restoreWindowSize() async {
+  if (!(Platform.isMacOS || Platform.isWindows || Platform.isLinux)) {
+    return;
+  }
+  try {
+    if (await windowManager.isMaximized() ||
+        await windowManager.isMinimized() ||
+        await windowManager.isFullScreen()) {
+      return;
+    }
+    var saved = LocalStorageService.instance.getValue<dynamic>(
+      LocalStorageService.kWindowSize,
+      null,
+    );
+    if (saved is List && saved.length == 2) {
+      var width = (saved[0] as num).toDouble();
+      var height = (saved[1] as num).toDouble();
+      if (width >= 280 && height >= 280) {
+        await windowManager.setSize(Size(width, height));
+        await windowManager.center();
+        Log.d("恢复窗口大小：$width x $height");
+      }
+    }
+  } catch (e) {
+    Log.logPrint(e);
+  }
+}
+
+/// 桌面端：若处于窗口全屏则退出，返回是否已处理。
+/// 用于鼠标侧键/ESC 返回时优先退出窗口全屏，而不是返回上一页。
+bool exitWindowFullScreenIfActive() {
+  if (Platform.isAndroid || Platform.isIOS) {
+    return false;
+  }
+  if (Get.isRegistered<LiveRoomController>()) {
+    final controller = Get.find<LiveRoomController>();
+    if (controller.windowFullScreenState.value) {
+      controller.exitWindowFullScreen();
+      return true;
+    }
+  }
+  return false;
 }
 
 Future initWindow() async {
@@ -258,6 +356,10 @@ class MyApp extends StatelessWidget {
                             ) {
                               instance
                                   .onTapDown = (TapDownDetails details) async {
+                                //窗口全屏优先退出，不返回上一页
+                                if (exitWindowFullScreenIfActive()) {
+                                  return;
+                                }
                                 //如果处于全屏状态，退出全屏
                                 if (!Platform.isAndroid && !Platform.isIOS) {
                                   if (await windowManager.isFullScreen()) {
@@ -274,6 +376,10 @@ class MyApp extends StatelessWidget {
                         onKeyEvent: (KeyEvent event) async {
                           if (event is KeyDownEvent &&
                               event.logicalKey == LogicalKeyboardKey.escape) {
+                            // 窗口全屏优先退出
+                            if (exitWindowFullScreenIfActive()) {
+                              return;
+                            }
                             // ESC退出全屏
                             // 如果处于全屏状态，退出全屏
                             if (!Platform.isAndroid && !Platform.isIOS) {

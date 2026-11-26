@@ -19,12 +19,23 @@ import 'package:simple_live_app/widgets/superchat_card.dart';
 import 'dart:async';
 import 'package:simple_live_core/simple_live_core.dart';
 
+/// 退出当前播放器窗口模式：窗口全屏 / 小窗 / 系统全屏
+void _exitPlayerWindowMode(LiveRoomController controller) {
+  if (controller.windowFullScreenState.value) {
+    controller.exitWindowFullScreen();
+  } else if (controller.smallWindowState.value) {
+    controller.exitSmallWindow();
+  } else {
+    controller.exitFull();
+  }
+}
+
 Widget playerControls(
   VideoState videoState,
   LiveRoomController controller,
 ) {
   return Obx(() {
-    if (controller.fullScreenState.value) {
+    if (controller.isFullScreenUI) {
       return buildFullControls(
         videoState,
         controller,
@@ -81,6 +92,7 @@ Widget buildFullControls(
           child: GestureDetector(
             onTap: controller.onTap,
             onDoubleTapDown: controller.onDoubleTap,
+            onSecondaryTapDown: (_) => controller.toggleWindowFullScreen(),
             onLongPress: () {
               if (controller.lockControlsState.value) {
                 return;
@@ -143,13 +155,7 @@ Widget buildFullControls(
               child: Row(
                 children: [
                   IconButton(
-                    onPressed: () {
-                      if (controller.smallWindowState.value) {
-                        controller.exitSmallWindow();
-                      } else {
-                        controller.exitFull();
-                      }
-                    },
+                    onPressed: () => _exitPlayerWindowMode(controller),
                     icon: const Icon(
                       Icons.arrow_back,
                       color: Colors.white,
@@ -332,14 +338,23 @@ Widget buildFullControls(
                       style: const TextStyle(color: Colors.white, fontSize: 15),
                     ),
                   ),
+                  Visibility(
+                    visible: !Platform.isAndroid && !Platform.isIOS,
+                    child: IconButton(
+                      onPressed: controller.toggleWindowFullScreen,
+                      tooltip: controller.windowFullScreenState.value
+                          ? "退出窗口全屏"
+                          : "窗口全屏",
+                      icon: Icon(
+                        controller.windowFullScreenState.value
+                            ? Icons.fullscreen_exit
+                            : Icons.fullscreen,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ),
                   IconButton(
-                    onPressed: () {
-                      if (controller.smallWindowState.value) {
-                        controller.exitSmallWindow();
-                      } else {
-                        controller.exitFull();
-                      }
-                    },
+                    onPressed: () => _exitPlayerWindowMode(controller),
                     icon: const Icon(
                       Remix.fullscreen_exit_fill,
                       color: Colors.white,
@@ -467,6 +482,7 @@ Widget buildControls(
         child: GestureDetector(
           onTap: controller.onTap,
           onDoubleTapDown: controller.onDoubleTap,
+          onSecondaryTapDown: (_) => controller.toggleWindowFullScreen(),
           onVerticalDragStart: controller.onVerticalDragStart,
           onVerticalDragUpdate: controller.onVerticalDragUpdate,
           onVerticalDragEnd: controller.onVerticalDragEnd,
@@ -606,6 +622,24 @@ Widget buildControls(
                       Icons.picture_in_picture,
                       color: Colors.white,
                       size: 24,
+                    ),
+                  ),
+                ),
+                // 窗口全屏：仅视频铺满窗口客户区（全屏按钮左侧）
+                Visibility(
+                  visible: !Platform.isAndroid && !Platform.isIOS,
+                  child: Obx(
+                    () => IconButton(
+                      onPressed: controller.toggleWindowFullScreen,
+                      tooltip: controller.windowFullScreenState.value
+                          ? "退出窗口全屏"
+                          : "窗口全屏",
+                      icon: Icon(
+                        controller.windowFullScreenState.value
+                            ? Icons.fullscreen_exit
+                            : Icons.fullscreen,
+                        color: Colors.white,
+                      ),
                     ),
                   ),
                 ),
