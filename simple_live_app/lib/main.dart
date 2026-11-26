@@ -64,6 +64,9 @@ void main() async {
   );
   SystemChrome.setSystemUIOverlayStyle(systemUiOverlayStyle);
   runApp(const MyApp());
+  // 桌面端：窗口尺寸已在显示前恢复，这里等首帧渲染完成后再显示窗口，
+  // 避免启动瞬间看到默认尺寸的白底窗口再跳动到上次的尺寸
+  unawaited(showWindowAfterFirstFrame());
 }
 
 /// 将Hive数据迁移到Application Support
@@ -209,10 +212,39 @@ Future initWindow() async {
     center: true,
     title: "Live",
   );
-  windowManager.waitUntilReadyToShow(windowOptions, () async {
+  // 只等待窗口就绪并应用初始参数，此时窗口仍处于隐藏状态。
+  // 显示动作放到尺寸恢复 + 首帧渲染之后（showWindowAfterFirstFrame），
+  // 避免启动时先出现默认尺寸的白底窗口，再跳到上次的尺寸。
+  await windowManager.waitUntilReadyToShow(windowOptions);
+  // 兜底：若启动流程异常导致迟迟没有显示窗口，超时后强制显示，避免无窗口可用
+  Timer(const Duration(seconds: 10), () async {
+    try {
+      if (!await windowManager.isVisible()) {
+        await windowManager.show();
+        await windowManager.focus();
+      }
+    } catch (e) {
+      Log.logPrint(e);
+    }
+  });
+}
+
+/// 桌面端：等待首帧渲染完成后再显示窗口，避免白屏和尺寸跳变
+Future<void> showWindowAfterFirstFrame() async {
+  if (!(Platform.isMacOS || Platform.isWindows || Platform.isLinux)) {
+    return;
+  }
+  try {
+    await WidgetsBinding.instance.endOfFrame;
+  } catch (e) {
+    Log.logPrint(e);
+  }
+  try {
     await windowManager.show();
     await windowManager.focus();
-  });
+  } catch (e) {
+    Log.logPrint(e);
+  }
 }
 
 Future initServices() async {
