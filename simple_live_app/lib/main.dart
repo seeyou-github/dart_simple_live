@@ -48,21 +48,14 @@ void main() async {
     exit(0);
     return;
   }
-  await migrateData();
+  // 只做窗口相关的最小初始化（纯 dart:io + 窗口通道），
+  // 数据目录、窗口尺寸都不经过 Hive，尽快把启动页显示出来。
   await initWindow();
-  MediaKit.ensureInitialized();
-  await Hive.initFlutter(
-    (!Platform.isAndroid && !Platform.isIOS)
-        ? (await AppDirs.appDataDirectory()).path
-        : null,
-  );
-  // 只初始化窗口尺寸恢复所需的最小服务，随后立刻显示启动页，
-  // 其余服务在启动页显示后再初始化，避免窗口长时间不出现。
-  await initBaseServices();
-  //桌面端：注册窗口大小监听并恢复上次手动调整的尺寸（此时窗口仍隐藏）
+  var appDir = await AppDirs.appDataDirectory();
   if (Platform.isMacOS || Platform.isWindows || Platform.isLinux) {
+    //注册窗口大小监听并恢复上次手动调整的尺寸（此时窗口仍隐藏）
     windowManager.addListener(_windowSizeListener);
-    await restoreWindowSize();
+    await restoreWindowSize(appDir);
   }
   SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
   //设置状态栏为透明
@@ -72,8 +65,8 @@ void main() async {
     systemNavigationBarColor: Colors.transparent,
   );
   SystemChrome.setSystemUIOverlayStyle(systemUiOverlayStyle);
-  // 先渲染启动页，首帧上屏后再显示窗口，正式界面在服务就绪后接替
-  runApp(const AppBootstrap());
+  // 先渲染启动页，首帧上屏后再显示窗口；Hive/数据库等服务在启动页期间初始化
+  runApp(AppBootstrap(appDir: appDir));
   unawaited(showWindowAfterFirstFrame());
 }
 
@@ -118,6 +111,10 @@ Future migrateData() async {
   }
 }
 
+/// 启动早期（尺寸迁移完成前）不写入窗口尺寸，
+/// 避免默认尺寸把上次保存的尺寸覆盖掉
+var _windowSizeSaveEnabled = false;
+
 /// 桌面端窗口大小记忆：仅保存用户手动调整的尺寸，
 /// 最大化/最小化/系统全屏/小窗状态均不保存。
 class _WindowSizeListener with WindowListener {
@@ -136,6 +133,9 @@ class _WindowSizeListener with WindowListener {
   }
 
   Future<void> _saveWindowSize() async {
+    if (!_windowSizeSaveEnabled) {
+      return;
+    }
     try {
       // 最大化/最小化/系统全屏时不保存，避免用异常尺寸覆盖用户手动调整的尺寸
       if (await windowManager.isMaximized() ||
@@ -152,10 +152,18 @@ class _WindowSizeListener with WindowListener {
       if (size.width < 280 || size.height < 280) {
         return;
       }
-      await LocalStorageService.instance.setValue(
-        LocalStorageService.kWindowSize,
-        [size.width, size.height],
-      );
+      // 轻量文件：下次启动可在 Hive 初始化之前直接读取，加快启动
+      await _writeWindowSizeFile(size);
+      // 同时写入 Hive，保持与备份 / 同步一致
+      try {
+        await LocalStorageService.instance.setValue(
+          LocalStorageService.kWindowSize,
+          [size.width, size.height],
+        );
+      } catch (e) {
+        // 启动早期 Hive 可能尚未初始化，忽略即可
+        Log.logPrint(e);
+      }
       Log.d("保存窗口大小：${size.width}x${size.height}");
     } catch (e) {
       Log.logPrint(e);
@@ -165,8 +173,21 @@ class _WindowSizeListener with WindowListener {
 
 final _windowSizeListener = _WindowSizeListener();
 
+/// 窗口尺寸轻量存储文件（纯 dart:io，不依赖 Hive / 插件）
+File _windowSizeFile(Directory appDir) =>
+    File(p.join(appDir.path, "window_size.txt"));
+
+Future<void> _writeWindowSizeFile(Size size) async {
+  try {
+    var appDir = await AppDirs.appDataDirectory();
+    await _windowSizeFile(appDir).writeAsString("${size.width},${size.height}");
+  } catch (e) {
+    Log.logPrint(e);
+  }
+}
+
 /// 恢复用户上次手动调整的窗口大小（不恢复最大化/最小化状态）
-Future restoreWindowSize() async {
+Future restoreWindowSize(Directory appDir) async {
   if (!(Platform.isMacOS || Platform.isWindows || Platform.isLinux)) {
     return;
   }
@@ -176,18 +197,44 @@ Future restoreWindowSize() async {
         await windowManager.isFullScreen()) {
       return;
     }
+    var file = _windowSizeFile(appDir);
+    if (!await file.exists()) {
+      return;
+    }
+    var parts = (await file.readAsString()).trim().split(",");
+    if (parts.length != 2) {
+      return;
+    }
+    var width = double.tryParse(parts[0]);
+    var height = double.tryParse(parts[1]);
+    if (width == null || height == null || width < 280 || height < 280) {
+      return;
+    }
+    await windowManager.setSize(Size(width, height));
+    await windowManager.center();
+    Log.d("恢复窗口大小：$width x $height");
+  } catch (e) {
+    Log.logPrint(e);
+  }
+}
+
+/// 把旧版本只存在 Hive 里的窗口尺寸补写到轻量文件，供下次启动快速恢复
+Future<void> migrateWindowSizeToFile() async {
+  if (!(Platform.isMacOS || Platform.isWindows || Platform.isLinux)) {
+    return;
+  }
+  try {
+    var appDir = await AppDirs.appDataDirectory();
+    var file = _windowSizeFile(appDir);
+    if (await file.exists()) {
+      return;
+    }
     var saved = LocalStorageService.instance.getValue<dynamic>(
       LocalStorageService.kWindowSize,
       null,
     );
     if (saved is List && saved.length == 2) {
-      var width = (saved[0] as num).toDouble();
-      var height = (saved[1] as num).toDouble();
-      if (width >= 280 && height >= 280) {
-        await windowManager.setSize(Size(width, height));
-        await windowManager.center();
-        Log.d("恢复窗口大小：$width x $height");
-      }
+      await file.writeAsString("${saved[0]},${saved[1]}");
     }
   } catch (e) {
     Log.logPrint(e);
@@ -284,11 +331,14 @@ Future<void> _waitNextFrameRasterized() async {
   } finally {
     WidgetsBinding.instance.removeTimingsCallback(onTimings);
   }
-  // 给合成器一点时间把这一帧真正提交到窗口
-  await Future.delayed(const Duration(milliseconds: 40));
+  // 给合成器一帧的时间把这一帧真正提交到窗口
+  await Future.delayed(const Duration(milliseconds: 16));
 }
 
-Future initBaseServices() async {
+Future initServices() async {
+  //播放器内核：只在真正需要播放前初始化即可，放到启动页期间完成
+  MediaKit.ensureInitialized();
+
   Hive.registerAdapter(FollowUserAdapter());
   Hive.registerAdapter(HistoryAdapter());
   Hive.registerAdapter(FollowUserTagAdapter());
@@ -298,9 +348,6 @@ Future initBaseServices() async {
   //本地存储
   Log.d("Init LocalStorage Service");
   await Get.put(LocalStorageService()).init();
-}
-
-Future initServices() async {
   await Get.put(DBService()).init();
   //初始化设置控制器
   Get.put(AppSettingsController());
@@ -314,6 +361,14 @@ Future initServices() async {
   Get.put(FollowService());
 
   initCoreLog();
+
+  // 旧版本窗口尺寸只存在 Hive 里，补写轻量文件供下次启动快速恢复；
+  // 迁移完成后才允许监听器写入尺寸，避免把默认尺寸覆盖上去。
+  try {
+    await migrateWindowSizeToFile();
+  } finally {
+    _windowSizeSaveEnabled = true;
+  }
 }
 
 void initCoreLog() {
@@ -343,7 +398,8 @@ void initCoreLog() {
 
 /// 应用引导：先显示启动页，服务初始化完成后切换到正式界面
 class AppBootstrap extends StatefulWidget {
-  const AppBootstrap({super.key});
+  final Directory appDir;
+  const AppBootstrap({super.key, required this.appDir});
 
   @override
   State<AppBootstrap> createState() => _AppBootstrapState();
@@ -360,6 +416,13 @@ class _AppBootstrapState extends State<AppBootstrap> {
 
   Future<void> _initServices() async {
     try {
+      // 旧数据迁移需要先于 Hive 初始化（仅 macOS/Linux 有效，Windows 直接返回）
+      await migrateData();
+      await Hive.initFlutter(
+        (!Platform.isAndroid && !Platform.isIOS)
+            ? widget.appDir.path
+            : null,
+      );
       await initServices();
     } catch (e, stack) {
       Log.e("初始化服务失败：$e", stack);
@@ -382,20 +445,10 @@ class _AppBootstrapState extends State<AppBootstrap> {
 class BootSplash extends StatelessWidget {
   const BootSplash({super.key});
 
-  bool get _isDark {
-    var mode = LocalStorageService.instance.getValue(
-      LocalStorageService.kThemeMode,
-      0,
-    );
-    if (mode == 2) {
-      return true;
-    }
-    if (mode == 1) {
-      return false;
-    }
-    return WidgetsBinding.instance.platformDispatcher.platformBrightness ==
-        Brightness.dark;
-  }
+  /// 此时 Hive 尚未初始化，直接跟随系统深浅色
+  bool get _isDark =>
+      WidgetsBinding.instance.platformDispatcher.platformBrightness ==
+      Brightness.dark;
 
   @override
   Widget build(BuildContext context) {
