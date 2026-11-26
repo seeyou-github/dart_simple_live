@@ -237,12 +237,24 @@ Future initWindow() async {
   });
 }
 
-/// 桌面端：等首帧真正上屏后再显示窗口，避免出现一帧白色背景
+/// 桌面端：等首帧真正上屏后再显示窗口。
+/// 原生 runner 已去掉「首帧自动 Show」，这里等启动页完成构建、
+/// 再等下一帧栅格化完成（并留一点余量）后显示，避免出现白屏帧。
 Future<void> showWindowAfterFirstFrame() async {
   if (!(Platform.isMacOS || Platform.isWindows || Platform.isLinux)) {
     return;
   }
-  await _waitFirstFrameRasterized();
+  try {
+    // 第一帧（启动页）构建完成；加超时兜底，避免极端情况下卡住不显示窗口
+    await WidgetsBinding.instance.endOfFrame.timeout(
+      const Duration(milliseconds: 300),
+      onTimeout: () {},
+    );
+  } catch (e) {
+    Log.logPrint(e);
+  }
+  // 再等一帧真正栅格化，确保画面已经提交给 GPU
+  await _waitNextFrameRasterized();
   try {
     await windowManager.show();
     await windowManager.focus();
@@ -251,8 +263,8 @@ Future<void> showWindowAfterFirstFrame() async {
   }
 }
 
-/// 等待首帧完成栅格化（FrameTiming 回调晚于 build 完成，更接近真正上屏）
-Future<void> _waitFirstFrameRasterized() async {
+/// 等待下一帧完成栅格化（FrameTiming 回调晚于 build 完成，更接近真正上屏）
+Future<void> _waitNextFrameRasterized() async {
   var completer = Completer<void>();
   void onTimings(List<FrameTiming> timings) {
     if (!completer.isCompleted) {
@@ -262,7 +274,7 @@ Future<void> _waitFirstFrameRasterized() async {
 
   WidgetsBinding.instance.addTimingsCallback(onTimings);
   try {
-    await WidgetsBinding.instance.endOfFrame;
+    WidgetsBinding.instance.scheduleFrame();
     await completer.future.timeout(
       const Duration(milliseconds: 200),
       onTimeout: () {},
@@ -272,6 +284,8 @@ Future<void> _waitFirstFrameRasterized() async {
   } finally {
     WidgetsBinding.instance.removeTimingsCallback(onTimings);
   }
+  // 给合成器一点时间把这一帧真正提交到窗口
+  await Future.delayed(const Duration(milliseconds: 40));
 }
 
 Future initBaseServices() async {

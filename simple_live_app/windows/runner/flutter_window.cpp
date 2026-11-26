@@ -27,9 +27,10 @@ bool FlutterWindow::OnCreate() {
   RegisterPlugins(flutter_controller_->engine());
   SetChildContent(flutter_controller_->view()->GetNativeWindow());
 
-  flutter_controller_->engine()->SetNextFrameCallback([&]() {
-    this->Show();
-  });
+  // 注意：这里不再在首帧回调里自动 Show()。
+  // 窗口的显示时机交给 Dart 端（window_manager）控制：等启动页完成构建、
+  // 画面真正栅格化后再显示，避免出现「透明 → 白屏 → 界面」的闪烁过程。
+  // 若 Dart 端始终没有显示窗口，main.dart 中有超时兜底会自动显示。
 
   // Flutter can complete the first frame before the "show window" callback is
   // registered. The following call ensures a frame is pending to ensure the
