@@ -103,16 +103,6 @@ class RemoteSyncWebDAVPage extends GetView<RemoteSyncWebDAVController> {
           AppStyle.divider,
           Obx(
             () => CheckboxListTile(
-              secondary: const Icon(Icons.history),
-              title: const Text("同步播放历史记录"),
-              value: controller.isSyncHistories.value,
-              controlAffinity: ListTileControlAffinity.trailing,
-              onChanged: (value) => controller.changeIsSyncHistories(),
-            ),
-          ),
-          AppStyle.divider,
-          Obx(
-            () => CheckboxListTile(
               secondary: const Icon(Remix.shield_keyhole_line),
               title: const Text("同步屏蔽字"),
               value: controller.isSyncBlockWord.value,

@@ -18,7 +18,6 @@ import 'package:simple_live_app/app/utils/archive.dart';
 import 'package:simple_live_app/app/utils/document.dart';
 import 'package:simple_live_app/models/db/follow_user.dart';
 import 'package:simple_live_app/models/db/follow_user_tag.dart';
-import 'package:simple_live_app/models/db/history.dart';
 import 'package:simple_live_app/modules/sync/remote_sync/webdav/webdav_client.dart';
 import 'package:simple_live_app/services/bilibili_account_service.dart';
 import 'package:simple_live_app/services/db_service.dart';
@@ -29,7 +28,6 @@ class RemoteSyncWebDAVController extends BaseController {
   var passwordVisible = true.obs;
   // ui-用户选择是否同步
   var isSyncFollows = true.obs;
-  var isSyncHistories = true.obs;
   var isSyncBlockWord = true.obs;
   var isSyncBilibiliAccount = true.obs;
 
@@ -39,7 +37,6 @@ class RemoteSyncWebDAVController extends BaseController {
   var lastUploadTime = "--".obs;
 
   final _userFollowJsonName = 'SimpleLive_follows.json';
-  final _userHistoriesJsonName = 'SimpleLive_histories.json';
   final _userBlockedWordJsonName = 'SimpleLive_blocked_word.json';
   final _userBilibiliAccountJsonName = 'SimpleLive_bilibili_account.json';
   final _userSettingsJsonName = 'SimpleLive_Settings.json';
@@ -198,15 +195,6 @@ class RemoteSyncWebDAVController extends BaseController {
       var dataTagsMap = {'data': userTagsList.map((e) => e.toJson()).toList()};
       var userTagsJsonFile = File(join(profile.path, _userTagsJsonName));
       await userTagsJsonFile.writeAsString(jsonEncode(dataTagsMap));
-      // histories
-      var userHistoriesList = DBService.instance.getHistores();
-      var dataHistoriesMap = {
-        'data': userHistoriesList.map((e) => e.toJson()).toList(),
-      };
-      final userHistoriesJsonFile = File(
-        join(profile.path, _userHistoriesJsonName),
-      );
-      await userHistoriesJsonFile.writeAsString(jsonEncode(dataHistoriesMap));
 
       // blocked_word
       var userShieldList = AppSettingsController.instance.shieldList;
@@ -285,23 +273,6 @@ class RemoteSyncWebDAVController extends BaseController {
         } catch (e) {
           Log.e('同步关注用户列表失败: $e', StackTrace.current);
         }
-      } else if (file.name == _userHistoriesJsonName && isSyncHistories.value) {
-        try {
-          for (var item in jsonData) {
-            var history = History.fromJson(item);
-            if (DBService.instance.historyBox.containsKey(history.id)) {
-              var old = DBService.instance.historyBox.get(history.id);
-              //如果本地的更新时间比较新，就不更新
-              if (old!.updateTime.isAfter(history.updateTime)) {
-                continue;
-              }
-            }
-            await DBService.instance.addOrUpdateHistory(history);
-          }
-          Log.i('已同步用户观看历史记录');
-        } catch (e) {
-          Log.e('同步用户观看历史记录失败: $e', StackTrace.current);
-        }
       } else if (file.name == _userBlockedWordJsonName &&
           isSyncBlockWord.value) {
         try {
@@ -364,10 +335,6 @@ class RemoteSyncWebDAVController extends BaseController {
 
   void changeIsSyncFollows() {
     isSyncFollows.value = !isSyncFollows.value;
-  }
-
-  void changeIsSyncHistories() {
-    isSyncHistories.value = !isSyncHistories.value;
   }
 
   void changeIsSyncBlockWord() {
