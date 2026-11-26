@@ -34,6 +34,9 @@ jobs:
       - name: Build Windows x64 release
         run: |
           cd simple_live_app
+          # MSVC 14.52+ 弃用 <experimental/coroutine>，flutter_inappwebview_windows
+          # 仍在使用该头文件，定义此宏抑制 C2338 (STL1011) 构建错误。
+          $env:CL = "/D_SILENCE_EXPERIMENTAL_COROUTINE_DEPRECATION_WARNINGS"
           flutter build windows --release
 
       - name: Package Windows x64 release zip
