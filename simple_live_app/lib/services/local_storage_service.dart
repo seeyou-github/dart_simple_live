@@ -1,6 +1,7 @@
 import 'package:get/get.dart';
 import 'package:hive/hive.dart';
 import 'package:simple_live_app/app/log.dart';
+import 'package:simple_live_app/app/security/local_field_codec.dart';
 
 class LocalStorageService extends GetxService {
   static LocalStorageService get instance => Get.find<LocalStorageService>();
@@ -174,6 +175,17 @@ class LocalStorageService extends GetxService {
   /// 主页分类栏中用户固定的分类（按站点存 JSON）
   static const String kPinnedCategories = "PinnedCategories";
 
+  /// 需要加密保存的字段：本地设置、导出的配置文件、同步到云端的配置文件
+  /// 里都不应出现明文。
+  static const Set<String> _sealedKeys = {
+    kWebDAVUri,
+    kWebDAVUser,
+    kWebDAVPassword,
+  };
+
+  static bool _isSealedKey(dynamic key) =>
+      key is String && _sealedKeys.contains(key);
+
   late Box settingsBox;
   late Box<String> shieldBox;
 
@@ -184,12 +196,32 @@ class LocalStorageService extends GetxService {
     shieldBox = await Hive.openBox(
       "DanmuShield",
     );
+    // 旧版本把 WebDAV 配置存成了明文，启动后统一转成密文
+    await sealSensitiveFields();
+  }
+
+  /// 把 [sealedKeys] 中仍是明文的字段加密重写一遍。
+  ///
+  /// 用于两处：启动时迁移旧明文数据；导入配置文件 / 从云端恢复后，
+  /// 兼容旧备份里带明文的设置。
+  Future<void> sealSensitiveFields() async {
+    for (var key in _sealedKeys) {
+      var raw = settingsBox.get(key);
+      if (raw is String && raw.isNotEmpty && !isSealedField(raw)) {
+        await settingsBox.put(key, sealField(raw));
+      }
+    }
   }
 
   T getValue<T>(dynamic key, T defaultValue) {
     try {
-      var value = settingsBox.get(key, defaultValue: defaultValue) as T;
-      Log.d("Get LocalStorage：$key\r\n$value");
+      dynamic stored = settingsBox.get(key, defaultValue: defaultValue);
+      if (_isSealedKey(key) && stored is String) {
+        stored = unsealField(stored);
+      }
+      var value = stored as T;
+      var logValue = _isSealedKey(key) ? "******" : "$value";
+      Log.d("Get LocalStorage：$key\r\n$logValue");
       return value;
     } catch (e) {
       Log.logPrint(e);
@@ -198,8 +230,13 @@ class LocalStorageService extends GetxService {
   }
 
   Future setValue<T>(dynamic key, T value) async {
-    Log.d("Set LocalStorage：$key\r\n$value");
-    return await settingsBox.put(key, value);
+    var logValue = _isSealedKey(key) ? "******" : "$value";
+    Log.d("Set LocalStorage：$key\r\n$logValue");
+    dynamic stored = value;
+    if (_isSealedKey(key) && value is String) {
+      stored = sealField(value);
+    }
+    return await settingsBox.put(key, stored);
   }
 
   Future removeValue<T>(dynamic key) async {

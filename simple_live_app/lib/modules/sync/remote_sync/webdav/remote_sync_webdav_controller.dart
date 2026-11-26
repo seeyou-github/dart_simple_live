@@ -297,6 +297,8 @@ class RemoteSyncWebDAVController extends BaseController {
         try {
           await LocalStorageService.instance.settingsBox.clear();
           LocalStorageService.instance.settingsBox.putAll(jsonData);
+          // 旧版本备份里的 WebDAV 配置是明文，恢复后统一转成密文
+          await LocalStorageService.instance.sealSensitiveFields();
           // 主页分类栏的固定分类存在设置里，恢复后通知界面刷新
           EventBus.instance.emit(Constant.kUpdatePinnedCategories, 0);
           Log.i('已同步用户设置');

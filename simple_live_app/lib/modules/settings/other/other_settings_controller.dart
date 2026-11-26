@@ -226,6 +226,8 @@ class OtherSettingsController extends BaseController {
       LocalStorageService.instance.shieldBox.putAll(
         data["shield"].cast<String, String>(),
       );
+      // 旧配置文件里的 WebDAV 配置是明文，导入后统一转成密文
+      await LocalStorageService.instance.sealSensitiveFields();
       SmartDialog.showToast("导入成功,重启生效");
     } catch (e) {
       Log.logPrint(e);
