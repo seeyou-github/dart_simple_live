@@ -7,17 +7,22 @@ class NetImage extends StatelessWidget {
   final double? height;
   final BoxFit? fit;
   final double borderRadius;
+  final Widget? fallbackWidget;
   const NetImage(this.picUrl,
       {this.width,
       this.height,
       this.fit = BoxFit.cover,
       this.borderRadius = 0,
+      this.fallbackWidget,
       Key? key})
       : super(key: key);
 
   @override
   Widget build(BuildContext context) {
     if (picUrl.isEmpty) {
+      if (fallbackWidget != null) {
+        return fallbackWidget!;
+      }
       return Image.asset(
         'assets/images/logo.png',
         width: width,
@@ -46,11 +51,12 @@ class NetImage extends StatelessWidget {
             );
           }
           if (e.extendedImageLoadState == LoadState.failed) {
-            return const Icon(
-              Icons.broken_image,
-              color: Colors.grey,
-              size: 24,
-            );
+            return fallbackWidget ??
+                const Icon(
+                  Icons.broken_image,
+                  color: Colors.grey,
+                  size: 24,
+                );
           }
           return null;
         },

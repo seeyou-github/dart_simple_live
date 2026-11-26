@@ -3,6 +3,7 @@ import 'package:flutter_easyrefresh/easy_refresh.dart';
 
 import 'package:get/get.dart';
 import 'package:simple_live_app/app/app_style.dart';
+import 'package:simple_live_app/widgets/default_category_icon.dart';
 import 'package:simple_live_app/modules/category/category_list_controller.dart';
 import 'package:simple_live_app/routes/app_navigation.dart';
 import 'package:simple_live_app/widgets/keep_alive_wrapper.dart';
@@ -79,6 +80,8 @@ class CategoryListView extends StatelessWidget {
   }
 
   Widget buildSubCategory(LiveSubCategory item) {
+    final pic = (item.pic ?? "").trim();
+    final fallbackIcon = DefaultCategoryIcon(categoryName: item.name);
     return ShadowCard(
       onTap: () {
         AppNavigator.toCategoryDetail(site: controller.site, category: item);
@@ -86,12 +89,15 @@ class CategoryListView extends StatelessWidget {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          NetImage(
-            item.pic ?? "",
-            width: 40,
-            height: 40,
-            borderRadius: 8,
-          ),
+          pic.isNotEmpty
+              ? NetImage(
+                  pic,
+                  width: 40,
+                  height: 40,
+                  borderRadius: 8,
+                  fallbackWidget: fallbackIcon,
+                )
+              : fallbackIcon,
           AppStyle.vGap4,
           Text(
             item.name,
