@@ -62,9 +62,8 @@ class BackupSyncResult {
   const BackupSyncResult.skipped([this.message])
       : outcome = BackupSyncOutcome.skipped;
 
-  const BackupSyncResult.failure(String message)
-      : outcome = BackupSyncOutcome.failure,
-        message = message;
+  const BackupSyncResult.failure(this.message)
+      : outcome = BackupSyncOutcome.failure;
 
   final BackupSyncOutcome outcome;
 
@@ -241,7 +240,7 @@ class _SyncState {
     // 弹幕关键词屏蔽
     var words = {
       for (var word in LocalStorageService.instance.shieldBox.values)
-        if ("$word".trim().isNotEmpty) "$word".trim(): true,
+        if (word.trim().isNotEmpty) word.trim(): true,
     };
     for (var word in words.keys) {
       var base =
@@ -454,7 +453,6 @@ class _SyncState {
       if (Get.isRegistered<AppSettingsController>()) {
         Get.find<AppSettingsController>().shieldList.assignAll(
               LocalStorageService.instance.shieldBox.values
-                  .map((e) => "$e")
                   .where((e) => e.trim().isNotEmpty),
             );
       }

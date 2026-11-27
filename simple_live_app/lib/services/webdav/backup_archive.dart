@@ -71,7 +71,6 @@ class BackupArchive {
       "douyin": DouyinAccountService.instance.cookie,
     };
     var blockWords = LocalStorageService.instance.shieldBox.values
-        .map((e) => "$e")
         .where((e) => e.trim().isNotEmpty)
         .toList();
     return {
@@ -338,7 +337,6 @@ class BackupArchive {
       if (Get.isRegistered<AppSettingsController>()) {
         Get.find<AppSettingsController>().shieldList.assignAll(
           LocalStorageService.instance.shieldBox.values
-              .map((e) => "$e")
               .where((e) => e.trim().isNotEmpty),
         );
       }

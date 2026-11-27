@@ -45,8 +45,8 @@ void main() async {
   // 桌面端单例：Windows 由原生 runner 的命名互斥体处理，
   // macOS / Linux 走这里的端口探测；若已有实例则唤醒其窗口并退出
   if (await SingleInstance.instance.ensureSingle()) {
+    // exit 返回 Never，这里不需要也无法再 return
     exit(0);
-    return;
   }
   // 只做窗口相关的最小初始化（纯 dart:io + 窗口通道），
   // 数据目录、窗口尺寸都不经过 Hive，尽快把启动页显示出来。

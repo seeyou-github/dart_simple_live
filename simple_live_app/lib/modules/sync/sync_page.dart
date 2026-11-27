@@ -231,7 +231,7 @@ class _SyncPageState extends State<SyncPage> {
     if (_busy) {
       return;
     }
-    if (!await Get.dialog<bool>(
+    var confirmed = await Get.dialog<bool>(
           AlertDialog(
             title: const Text("导入备份"),
             content: const Text(
@@ -251,7 +251,8 @@ class _SyncPageState extends State<SyncPage> {
             ],
           ),
         ) ??
-        false) {
+        false;
+    if (!confirmed) {
       return;
     }
     _busy = true;

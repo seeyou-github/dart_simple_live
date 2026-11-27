@@ -50,7 +50,8 @@ String describeBackupError(Object error) {
       case dio.DioExceptionType.sendTimeout:
         return "网络超时：上传超时，请检查网络";
       case dio.DioExceptionType.receiveTimeout:
-      case dio.DioExceptionType.transformTimeout:
+        // 注意：dio 5.11 才新增 transformTimeout，低版本没有这个枚举值，
+        // 这里不要引用它，否则解析到 dio 5.9 时会编译失败
         return "网络超时：服务器响应过慢，请稍后重试";
       case dio.DioExceptionType.badCertificate:
         return "证书错误：HTTPS 证书校验失败";
