@@ -187,10 +187,14 @@ class LiveRoomPage extends GetView<LiveRoomController> {
         Video(
           key: controller.globalPlayerKey,
           controller: controller.videoController,
+          // 「进入后台自动暂停」开启时，进后台暂停播放；
+          // 音频模式下（含手动开启）进后台应继续播放音频，不暂停
           pauseUponEnteringBackgroundMode:
-              AppSettingsController.instance.playerAutoPause.value,
+              AppSettingsController.instance.playerAutoPause.value &&
+              !controller.audioMode.value,
           resumeUponEnteringForegroundMode:
-              AppSettingsController.instance.playerAutoPause.value,
+              AppSettingsController.instance.playerAutoPause.value &&
+              !controller.audioMode.value,
           controls: (state) {
             return playerControls(state, controller);
           },
