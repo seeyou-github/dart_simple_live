@@ -10,13 +10,9 @@ import 'package:remixicon/remixicon.dart';
 import 'package:simple_live_app/app/app_style.dart';
 import 'package:simple_live_app/app/constant.dart';
 import 'package:simple_live_app/app/controller/app_settings_controller.dart';
-import 'package:simple_live_app/app/sites.dart';
 import 'package:simple_live_app/app/utils.dart';
 import 'package:simple_live_app/modules/live_room/live_room_controller.dart';
 import 'package:simple_live_app/modules/live_room/player/player_controls.dart';
-import 'package:simple_live_app/services/follow_service.dart';
-import 'package:simple_live_app/widgets/desktop_refresh_button.dart';
-import 'package:simple_live_app/widgets/follow_user_item.dart';
 import 'package:simple_live_app/widgets/keep_alive_wrapper.dart';
 import 'package:simple_live_app/widgets/net_image.dart';
 import 'package:simple_live_app/widgets/settings/settings_action.dart';
@@ -310,7 +306,7 @@ class LiveRoomPage extends GetView<LiveRoomController> {
   Widget buildMessageArea() {
     return Expanded(
       child: DefaultTabController(
-        length: controller.site.id == Constant.kBiliBili ? 4 : 3,
+        length: controller.site.id == Constant.kBiliBili ? 3 : 2,
         child: Column(
           children: [
             TabBar(
@@ -331,9 +327,6 @@ class LiveRoomPage extends GetView<LiveRoomController> {
                       ),
                     ),
                   ),
-                const Tab(
-                  text: "关注",
-                ),
                 const Tab(
                   text: "设置",
                 ),
@@ -382,7 +375,6 @@ class LiveRoomPage extends GetView<LiveRoomController> {
                   ),
                   if (controller.site.id == Constant.kBiliBili)
                     buildSuperChats(),
-                  buildFollowList(),
                   buildSettings(),
                 ],
               ),
@@ -595,52 +587,44 @@ class LiveRoomPage extends GetView<LiveRoomController> {
                 title: "画面尺寸",
                 onTap: controller.showPlayerSettingsSheet,
               ),
+              AppStyle.divider,
+              SettingsAction(
+                title: "APP中打开",
+                onTap: controller.openNaviteAPP,
+              ),
             ],
           ),
         ),
-      ],
-    );
-  }
-
-  Widget buildFollowList() {
-    return Obx(
-      () => Stack(
-        children: [
-          RefreshIndicator(
-            onRefresh: FollowService.instance.loadData,
-            child: ListView.builder(
-              itemCount: FollowService.instance.liveList.length,
-              itemBuilder: (_, i) {
-                var item = FollowService.instance.liveList[i];
-                return Obx(
-                  () => FollowUserItem(
-                    item: item,
-                    playing: controller.rxSite.value.id == item.siteId &&
-                        controller.rxRoomId.value == item.roomId,
-                    onTap: () {
-                      controller.resetRoom(
-                        Sites.allSites[item.siteId]!,
-                        item.roomId,
-                      );
-                    },
-                  ),
-                );
-              },
-            ),
+        Padding(
+          padding: AppStyle.edgeInsetsA12,
+          child: Text(
+            "分享",
+            style: Get.textTheme.titleSmall,
           ),
-          if (Platform.isLinux || Platform.isWindows || Platform.isMacOS)
-            Positioned(
-              right: 12,
-              bottom: 12,
-              child: Obx(
-                () => DesktopRefreshButton(
-                  refreshing: FollowService.instance.updating.value,
-                  onPressed: FollowService.instance.loadData,
-                ),
+        ),
+        SettingsCard(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              SettingsAction(
+                title: "分享直播间",
+                onTap: controller.share,
               ),
-            ),
-        ],
-      ),
+              AppStyle.divider,
+              SettingsAction(
+                title: "复制链接",
+                onTap: controller.copyUrl,
+              ),
+              AppStyle.divider,
+              SettingsAction(
+                title: "播放信息",
+                onTap: controller.showDebugInfo,
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 12),
+      ],
     );
   }
 
@@ -661,133 +645,7 @@ class LiveRoomPage extends GetView<LiveRoomController> {
                 icon: const Icon(Remix.heart_line),
               ),
       ),
-      IconButton(
-        onPressed: () {
-          showMore();
-        },
-        icon: const Icon(Icons.more_horiz),
-      ),
     ];
-  }
-
-  void showMore() {
-    showModalBottomSheet(
-      context: Get.context!,
-      constraints: const BoxConstraints(
-        maxWidth: 600,
-      ),
-      isScrollControlled: true,
-      builder: (_) => Container(
-        padding: EdgeInsets.only(
-          bottom: AppStyle.bottomBarHeight,
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(
-              leading: const Icon(Icons.refresh),
-              title: const Text("刷新"),
-              trailing: const Icon(Icons.chevron_right),
-              onTap: () {
-                controller.refreshRoom();
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.play_circle_outline),
-              trailing: const Icon(Icons.chevron_right),
-              title: const Text("切换清晰度"),
-              onTap: () {
-                Get.back();
-                controller.showQualitySheet();
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.switch_video_outlined),
-              title: const Text("切换线路"),
-              trailing: const Icon(Icons.chevron_right),
-              onTap: () {
-                Get.back();
-                controller.showPlayUrlsSheet();
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.aspect_ratio_outlined),
-              title: const Text("画面尺寸"),
-              trailing: const Icon(Icons.chevron_right),
-              onTap: () {
-                Get.back();
-                controller.showPlayerSettingsSheet();
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.camera_alt_outlined),
-              title: const Text("截图"),
-              trailing: const Icon(Icons.chevron_right),
-              onTap: () {
-                controller.saveScreenshot();
-              },
-            ),
-            Visibility(
-              visible: Platform.isAndroid,
-              child: ListTile(
-                leading: const Icon(Icons.picture_in_picture),
-                title: const Text("小窗播放"),
-                trailing: const Icon(Icons.chevron_right),
-                onTap: () {
-                  Get.back();
-                  controller.enablePIP();
-                },
-              ),
-            ),
-            ListTile(
-              leading: const Icon(Icons.timer_outlined),
-              title: const Text("定时关闭"),
-              trailing: const Icon(Icons.chevron_right),
-              onTap: () {
-                Get.back();
-                controller.showAutoExitSheet();
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.share_sharp),
-              title: const Text("分享直播间"),
-              trailing: const Icon(Icons.chevron_right),
-              onTap: () {
-                Get.back();
-                controller.share();
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.copy),
-              title: const Text("复制链接"),
-              trailing: const Icon(Icons.chevron_right),
-              onTap: () {
-                Get.back();
-                controller.copyUrl();
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.open_in_new),
-              title: const Text("APP中打开"),
-              trailing: const Icon(Icons.chevron_right),
-              onTap: () {
-                Get.back();
-                controller.openNaviteAPP();
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.info_outline_rounded),
-              title: const Text("播放信息"),
-              trailing: const Icon(Icons.chevron_right),
-              onTap: () {
-                Get.back();
-                controller.showDebugInfo();
-              },
-            ),
-          ],
-        ),
-      ),
-    );
   }
 
   String parseDuration(int sec) {
