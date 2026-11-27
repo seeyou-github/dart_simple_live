@@ -122,6 +122,19 @@ mixin PlayerStateMixin on PlayerMixin {
   /// 音频模式是否由用户手动开启：自动进入的会在回到前台 / 窗口重新获得焦点时退出
   bool audioModeManual = false;
 
+  /// 桌面端音频模式下替代黑屏的「最后一帧画面」
+  ///
+  /// 进入音频模式前（mpv `vid=no` 之前）抓一张当前画面，窗口最小化 / 失焦后
+  /// 仍显示这张静帧，不再整块黑屏。
+  final Rxn<Uint8List> frozenFrame = Rxn<Uint8List>();
+
+  /// 退出音频模式后延迟释放静帧的定时器：
+  /// 视频轨道刚恢复解码时还没有新帧，立刻撤掉静帧会闪一下黑屏
+  Timer? _frozenFrameTimer;
+
+  /// 抓帧重入保护（后台监控可能重复触发进入音频模式）
+  bool _capturingFrozenFrame = false;
+
   /// 是否应显示全屏播放器 UI（系统全屏 或 窗口全屏）
   bool get isFullScreenUI => fullScreenState.value || windowFullScreenState.value;
 
@@ -342,6 +355,10 @@ mixin PlayerSystemMixin on PlayerMixin, PlayerStateMixin, PlayerDanmakuMixin {
     if (audioMode.value) {
       return;
     }
+    // 抓帧必须在关闭视频解码之前：之后再截就只有黑屏了（仅桌面端）
+    _frozenFrameTimer?.cancel();
+    _frozenFrameTimer = null;
+    await captureFrozenFrame();
     audioMode.value = true;
     danmakuController?.clear();
     // 只听声音，屏幕不需要常亮（失败不影响音频模式生效）
@@ -370,6 +387,47 @@ mixin PlayerSystemMixin on PlayerMixin, PlayerStateMixin, PlayerDanmakuMixin {
       await WakelockPlus.enable();
     }
     await stopAudioNotification();
+    // 视频重新解码需要一点时间出新帧：先保留静帧，稍后再释放，
+    // 避免恢复瞬间闪一下黑屏
+    _releaseFrozenFrame();
+  }
+
+  /// 抓取当前画面作为音频模式的静帧（仅桌面端，失败静默）
+  ///
+  /// 带超时兜底：截图内部会等待视频输出就绪，某些流可能长时间不返回，
+  /// 不能因此卡住「进入音频模式」。
+  Future<void> captureFrozenFrame() async {
+    if (Platform.isAndroid || Platform.isIOS || _capturingFrozenFrame) {
+      return;
+    }
+    _capturingFrozenFrame = true;
+    try {
+      var bytes = await player
+          .screenshot(format: 'image/jpeg')
+          .timeout(const Duration(seconds: 1));
+      if (bytes != null && bytes.isNotEmpty) {
+        frozenFrame.value = bytes;
+      }
+    } catch (e) {
+      // 未出帧 / 已关闭 / 超时：保持黑屏兜底即可
+      Log.logPrint(e);
+    } finally {
+      _capturingFrozenFrame = false;
+    }
+  }
+
+  /// 延迟释放静帧：等视频恢复出帧后再撤掉
+  void _releaseFrozenFrame() {
+    _frozenFrameTimer?.cancel();
+    if (frozenFrame.value == null) {
+      return;
+    }
+    _frozenFrameTimer = Timer(const Duration(milliseconds: 800), () {
+      _frozenFrameTimer = null;
+      if (!audioMode.value) {
+        frozenFrame.value = null;
+      }
+    });
   }
 
   /// 音频模式开关（移动端控制条按钮）
@@ -1000,6 +1058,9 @@ class PlayerController extends BaseController
   @override
   void onClose() async {
     Log.w("播放器关闭");
+    _frozenFrameTimer?.cancel();
+    _frozenFrameTimer = null;
+    frozenFrame.value = null;
     if (windowFullScreenState.value) {
       exitWindowFullScreen();
     }

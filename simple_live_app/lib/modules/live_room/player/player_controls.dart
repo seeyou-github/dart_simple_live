@@ -27,54 +27,112 @@ void _exitPlayerWindowMode(LiveRoomController controller) {
   }
 }
 
-/// 音频模式下的黑屏占位
+/// 音频模式下的画面占位
 ///
-/// 音频模式会关闭视频解码（mpv `vid=no`），画面不再刷新，
-/// 用图标 + 房间信息提示当前是"只听声音"，避免误以为卡住。
+/// 音频模式会关闭视频解码（mpv `vid=no`），画面不再刷新：
+/// - 桌面端：显示进入音频模式前的最后一帧静帧，避免整块黑屏；
+/// - 抓不到静帧（移动端 / 未出帧）：退回黑底 + 图标 + 房间信息提示，
+///   说明当前是"只听声音"，避免误以为卡住。
 Widget buildAudioModeBackdrop(LiveRoomController controller) {
   return Positioned.fill(
     child: Obx(
-      () => controller.audioMode.value
-          ? Container(
-              color: Colors.black,
-              alignment: Alignment.center,
-              child: Padding(
-                padding: AppStyle.edgeInsetsA24,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(
-                      Remix.music_2_line,
-                      size: 56,
-                      color: Colors.white70,
-                    ),
-                    AppStyle.vGap12,
-                    const Text(
-                      "音频模式",
-                      style: TextStyle(color: Colors.white, fontSize: 16),
-                    ),
-                    AppStyle.vGap4,
-                    Text(
-                      "${controller.detail.value?.userName ?? ""}："
-                      "${controller.detail.value?.title ?? ""}",
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(
-                        color: Colors.white54,
-                        fontSize: 12,
-                      ),
-                    ),
-                    AppStyle.vGap4,
-                    const Text(
-                      "已暂停画面解码，仅播放声音",
-                      style: TextStyle(color: Colors.white38, fontSize: 12),
-                    ),
-                  ],
-                ),
+      () {
+        var frame = controller.frozenFrame.value;
+        if (frame != null) {
+          // 跟随「画面缩放」设置，避免静帧与正常画面尺寸不一致
+          var scaleMode = AppSettingsController.instance.scaleMode.value;
+          var fit = scaleMode == 1
+              ? BoxFit.fill
+              : scaleMode == 2
+                  ? BoxFit.cover
+                  : BoxFit.contain;
+          return Stack(
+            fit: StackFit.expand,
+            children: [
+              const ColoredBox(color: Colors.black),
+              Image.memory(
+                frame,
+                fit: fit,
+                gaplessPlayback: true,
+                // 只是定格画面，不需要高质量重采样
+                filterQuality: FilterQuality.low,
               ),
-            )
-          : const SizedBox.shrink(),
+              if (controller.audioMode.value)
+                Positioned(
+                  left: 12,
+                  bottom: 12,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 4,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.black54,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: const Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Remix.music_2_line,
+                          size: 14,
+                          color: Colors.white70,
+                        ),
+                        SizedBox(width: 4),
+                        Text(
+                          "音频模式 · 仅播放声音",
+                          style: TextStyle(color: Colors.white70, fontSize: 11),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+            ],
+          );
+        }
+        if (!controller.audioMode.value) {
+          return const SizedBox.shrink();
+        }
+        return Container(
+          color: Colors.black,
+          alignment: Alignment.center,
+          child: Padding(
+            padding: AppStyle.edgeInsetsA24,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(
+                  Remix.music_2_line,
+                  size: 56,
+                  color: Colors.white70,
+                ),
+                AppStyle.vGap12,
+                const Text(
+                  "音频模式",
+                  style: TextStyle(color: Colors.white, fontSize: 16),
+                ),
+                AppStyle.vGap4,
+                Text(
+                  "${controller.detail.value?.userName ?? ""}："
+                  "${controller.detail.value?.title ?? ""}",
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    color: Colors.white54,
+                    fontSize: 12,
+                  ),
+                ),
+                AppStyle.vGap4,
+                const Text(
+                  "已暂停画面解码，仅播放声音",
+                  style: TextStyle(color: Colors.white38, fontSize: 12),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
     ),
   );
 }
