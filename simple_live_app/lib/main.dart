@@ -31,7 +31,7 @@ import 'package:simple_live_app/services/douyin_account_service.dart';
 import 'package:simple_live_app/services/db_service.dart';
 import 'package:simple_live_app/services/follow_service.dart';
 import 'package:simple_live_app/services/local_storage_service.dart';
-import 'package:simple_live_app/services/sync_service.dart';
+import 'package:simple_live_app/services/webdav/backup_sync.dart';
 import 'package:simple_live_app/widgets/status/app_loadding_widget.dart';
 import 'package:simple_live_core/simple_live_core.dart';
 import 'package:window_manager/window_manager.dart';
@@ -356,8 +356,6 @@ Future initServices() async {
 
   Get.put(DouyinAccountService());
 
-  Get.put(SyncService());
-
   Get.put(FollowService());
 
   initCoreLog();
@@ -369,6 +367,9 @@ Future initServices() async {
   } finally {
     _windowSizeSaveEnabled = true;
   }
+
+  // 自动备份 / 自动同步调度：冷启动一分钟后首次触发，之后随数据变更防抖触发
+  BackupScheduler.init();
 }
 
 void initCoreLog() {

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
 import 'package:get/get.dart';
 import 'package:remixicon/remixicon.dart';
 import 'package:simple_live_app/app/app_style.dart';
@@ -9,6 +10,8 @@ import 'package:simple_live_app/models/db/follow_user_tag.dart';
 import 'package:simple_live_app/modules/follow_user/follow_user_controller.dart';
 import 'package:simple_live_app/routes/app_navigation.dart';
 import 'package:simple_live_app/services/follow_service.dart';
+import 'package:simple_live_app/services/webdav/backup_sync.dart';
+import 'package:simple_live_app/services/webdav/backup_task.dart';
 import 'package:simple_live_app/widgets/follow_user_item.dart';
 import 'package:simple_live_app/widgets/page_grid_view.dart';
 
@@ -23,6 +26,24 @@ class FollowUserPage extends GetView<FollowUserController> {
       appBar: AppBar(
         title: const Text("关注用户"),
         actions: [
+          // 立即同步：与左侧刷新按钮区分（刷新只刷直播状态）
+          ValueListenableBuilder<List<BackupTask>>(
+            valueListenable: BackupTaskCenter.active,
+            builder: (context, _, __) {
+              var syncing = BackupTaskCenter.isRunning(BackupTaskKind.sync);
+              return IconButton(
+                tooltip: syncing ? "正在同步" : "同步",
+                onPressed: syncing ? null : _syncNow,
+                icon: syncing
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.sync),
+              );
+            },
+          ),
           PopupMenuButton(
             itemBuilder: (context) {
               return const [
@@ -154,8 +175,23 @@ class FollowUserPage extends GetView<FollowUserController> {
     );
   }
 
-  void setFollowTagDialog(FollowUser item) {
-    /// 控制单选ui
+  /// 立即同步关注 / 关注标签 / 固定分类 / 屏蔽词
+  Future<void> _syncNow() async {
+    var result = await BackupSync.syncNow();
+    switch (result.outcome) {
+      case BackupSyncOutcome.success:
+        SmartDialog.showToast("同步成功");
+        break;
+      case BackupSyncOutcome.failure:
+        showBackupFailure("同步失败", result.message ?? "未知错误");
+        break;
+      case BackupSyncOutcome.skipped:
+        SmartDialog.showToast(result.message ?? "同步进行中，请稍候");
+        break;
+    }
+  }
+
+  void setFollowTagDialog(FollowUser item) {    /// 控制单选ui
     List<FollowUserTag> copiedList = [
       controller.tagList.first,
       ...controller.tagList.skip(3),
