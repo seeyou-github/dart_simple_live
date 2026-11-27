@@ -2,6 +2,7 @@
 
 import 'dart:async';
 import 'package:get/get.dart';
+import 'package:simple_live_app/app/constant.dart';
 import 'package:simple_live_app/app/controller/base_controller.dart';
 import 'package:simple_live_app/app/event_bus.dart';
 import 'package:simple_live_app/app/utils.dart';
@@ -63,11 +64,13 @@ class FollowUserController extends BasePageController<FollowUser> {
       return;
     }
     await DBService.instance.followBox.delete(item.id);
-    refreshData();
+    // 走统一刷新链路，立即更新关注页（不受下拉刷新冷却限制）
+    EventBus.instance.emit(Constant.kUpdateFollow, item.id);
   }
 
-  void updateItem(FollowUser item) {
-    FollowService.instance.addFollow(item);
+  Future<void> updateItem(FollowUser item) async {
+    await FollowService.instance.addFollow(item);
+    EventBus.instance.emit(Constant.kUpdateFollow, item.id);
   }
 
   @override

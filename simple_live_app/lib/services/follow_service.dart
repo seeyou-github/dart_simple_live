@@ -75,14 +75,19 @@ class FollowService extends GetxService {
 
   Future<void> loadData({bool updateStatus = true}) async {
     var list = DBService.instance.getFollowList();
+    followList.assignAll(list);
     if (list.isEmpty) {
       updating.value = false;
-      followList.assignAll(list);
+      // 列表清空也要立即通知关注页，避免残留旧数据
+      filterData();
       return;
     }
-    followList.assignAll(list);
     if (updateStatus) {
+      // liveStatus 不入库，等状态更新完成后统一 filterData()，避免排序闪烁
       startUpdateStatus();
+    } else {
+      // 同步成功、关注/取消关注等无需重查状态的变更，立即通知关注页刷新
+      filterData();
     }
   }
 
