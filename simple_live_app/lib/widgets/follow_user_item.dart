@@ -40,7 +40,8 @@ class FollowUserItem extends StatelessWidget {
               alignment: ui.PlaceholderAlignment.middle,
               child: Obx(
                 () => Offstage(
-                  offstage: item.liveStatus.value == 0,
+                  // 只有直播中才显示状态徽标，未开播不显示任何文字
+                  offstage: item.liveStatus.value != 2,
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
@@ -49,9 +50,7 @@ class FollowUserItem extends StatelessWidget {
                         width: 8,
                         height: 8,
                         decoration: BoxDecoration(
-                          color: item.liveStatus.value == 2
-                              ? Colors.green
-                              : Colors.grey,
+                          color: Colors.green,
                           borderRadius: AppStyle.radius12,
                         ),
                       ),
@@ -61,8 +60,6 @@ class FollowUserItem extends StatelessWidget {
                         style: TextStyle(
                           fontSize: 12,
                           fontWeight: FontWeight.normal,
-                          color:
-                              item.liveStatus.value == 2 ? null : Colors.grey,
                         ),
                       ),
                     ],
@@ -136,13 +133,10 @@ class FollowUserItem extends StatelessWidget {
   }
 
   String getStatus(int status) {
-    if (status == 0) {
-      return "读取中";
-    } else if (status == 1) {
-      return "未开播";
-    } else {
+    if (status == 2) {
       return "直播中";
     }
+    return "";
   }
 
   String formatLiveDuration(String? startTimeStampString) {
