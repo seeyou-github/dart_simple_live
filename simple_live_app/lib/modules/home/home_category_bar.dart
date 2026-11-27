@@ -560,6 +560,9 @@ class _CategoryPickerSheetState extends State<_CategoryPickerSheet> {
         child: ReorderableListView.builder(
           scrollDirection: Axis.horizontal,
           padding: EdgeInsets.zero,
+          // 关闭默认拖动手柄：桌面端默认手柄会浮在胶囊左侧并压住文字，
+          // 这里改为在文字右侧自行放置手柄
+          buildDefaultDragHandles: false,
           itemCount: _pinned.length,
           onReorder: _onPinnedReorder,
           proxyDecorator: (child, index, animation) {
@@ -579,7 +582,7 @@ class _CategoryPickerSheetState extends State<_CategoryPickerSheet> {
             return Padding(
               key: ValueKey("${item.parentId}_${item.categoryId}"),
               padding: const EdgeInsets.only(right: 8),
-              child: _buildPinnedChip(context, item),
+              child: _buildPinnedChip(context, item, index),
             );
           },
         ),
@@ -587,11 +590,15 @@ class _CategoryPickerSheetState extends State<_CategoryPickerSheet> {
     );
   }
 
-  Widget _buildPinnedChip(BuildContext context, PinnedCategory item) {
+  Widget _buildPinnedChip(
+    BuildContext context,
+    PinnedCategory item,
+    int index,
+  ) {
     var colorScheme = Theme.of(context).colorScheme;
     return Container(
       height: 32,
-      padding: const EdgeInsets.only(left: 3, right: 12),
+      padding: const EdgeInsets.only(left: 3, right: 4),
       decoration: BoxDecoration(
         // 不透明实色：拖动时浮起的胶囊不会与下方文字透出重叠
         color: Color.alphaBlend(
@@ -631,6 +638,21 @@ class _CategoryPickerSheetState extends State<_CategoryPickerSheet> {
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: TextStyle(fontSize: 13, color: colorScheme.onSurface),
+            ),
+          ),
+          // 拖动手柄放在文字右侧，与文字同一行，不遮挡名称
+          ReorderableDragStartListener(
+            index: index,
+            child: MouseRegion(
+              cursor: SystemMouseCursors.grab,
+              child: Padding(
+                padding: const EdgeInsets.only(left: 4, right: 2),
+                child: Icon(
+                  Icons.drag_handle_rounded,
+                  size: 15,
+                  color: colorScheme.onSurfaceVariant.withAlpha(170),
+                ),
+              ),
             ),
           ),
         ],
