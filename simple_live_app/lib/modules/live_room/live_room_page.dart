@@ -587,18 +587,13 @@ class LiveRoomPage extends GetView<LiveRoomController> {
                 title: "画面尺寸",
                 onTap: controller.showPlayerSettingsSheet,
               ),
-              AppStyle.divider,
-              SettingsAction(
-                title: "APP中打开",
-                onTap: controller.openNaviteAPP,
-              ),
             ],
           ),
         ),
         Padding(
           padding: AppStyle.edgeInsetsA12,
           child: Text(
-            "分享",
+            "其它",
             style: Get.textTheme.titleSmall,
           ),
         ),
@@ -606,11 +601,6 @@ class LiveRoomPage extends GetView<LiveRoomController> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              SettingsAction(
-                title: "分享直播间",
-                onTap: controller.share,
-              ),
-              AppStyle.divider,
               SettingsAction(
                 title: "复制链接",
                 onTap: controller.copyUrl,
