@@ -22,6 +22,35 @@ const _syncFileVersion = 1;
 /// 墓碑保留时长：超过后不再参与合并，避免文件无限增长
 const _tombstoneTtlMs = 180 * 24 * 60 * 60 * 1000;
 
+/// 关注条目里会随后台刷新变化的字段。
+///
+/// 头像地址每次刷新关注都可能变，如果参与「是否修改」的比较，
+/// 每次更新关注都会把整批关注标成刚修改，从而反复触发同步上传。
+const _followVolatileKeys = {"face"};
+
+/// 关注条目的语义比较（忽略 [_followVolatileKeys]）
+bool _sameFollowContent(
+  Map<String, dynamic>? a,
+  Map<String, dynamic>? b,
+) {
+  if (identical(a, b)) {
+    return true;
+  }
+  if (a == null || b == null) {
+    return false;
+  }
+  var keys = <String>{...a.keys, ...b.keys};
+  for (var key in keys) {
+    if (_followVolatileKeys.contains(key)) {
+      continue;
+    }
+    if (a[key] != b[key]) {
+      return false;
+    }
+  }
+  return true;
+}
+
 /// 一次同步的结果
 enum BackupSyncOutcome { success, skipped, failure }
 
@@ -171,7 +200,7 @@ class _SyncState {
       var map = entry.value.toJson();
       var base =
           baseline?.follows[entry.key] ?? _seedRecord(seed?.follows[entry.key]);
-      if (base != null && !base.deleted && mapEquals(base.data, map)) {
+      if (base != null && !base.deleted && _sameFollowContent(base.data, map)) {
         state.follows[entry.key] = base;
       } else if (base != null) {
         state.follows[entry.key] = _Record(
@@ -322,7 +351,7 @@ class _SyncState {
       if (data == null) {
         continue;
       }
-      if (current != null && mapEquals(current.toJson(), data)) {
+      if (current != null && _sameFollowContent(current.toJson(), data)) {
         continue;
       }
       try {
@@ -486,10 +515,16 @@ class BackupSync {
     _restoreBasisAt = DateTime.now();
   }
 
-  /// 取出可用的时间基准；过期或未设置时返回 null
+  /// 取出可用的时间基准；过期或未设置时返回 null。
+  ///
+  /// 取出即清空：时间基准只对紧接着的这一次同步有效。之前只在成功时清空，
+  /// 失败后会在接下来 30 分钟里继续生效，把期间正常产生的本地修改
+  /// 也打上旧时间戳，从而被云端较新的记录覆盖。
   static int? _takeRestoreBasis() {
     var basis = _restoreBasis;
     var at = _restoreBasisAt;
+    _restoreBasis = null;
+    _restoreBasisAt = null;
     if (basis == null || at == null) {
       return null;
     }
@@ -581,8 +616,6 @@ class BackupSync {
           BackupClient.syncFileName,
         );
       }
-      _restoreBasis = null;
-      _restoreBasisAt = null;
       BackupScheduler.markSynced();
       return const BackupSyncResult.success();
     } catch (e) {
@@ -621,6 +654,80 @@ class BackupScheduler {
   static DateTime? _lastSyncAt;
   static DateTime? _ignoreBefore;
   static final List<StreamSubscription<dynamic>> _subs = [];
+
+  /// 不触发自动备份 / 自动同步的设置项。
+  ///
+  /// 一是本模块自身写入的键（避免自我循环），二是高频变化的显示类设置：
+  /// 窗口尺寸、音量、各类滑块会随用户操作连续写入，若每次都触发，
+  /// 用户调音量或拖动窗口时就会不断把整包数据上传到 WebDAV。
+  static const _quietKeys = <String>{
+    // 同步基线、WebDAV 配置与开关自身
+    LocalStorageService.kWebDavSyncState,
+    LocalStorageService.kWebDAVUri,
+    LocalStorageService.kWebDAVUser,
+    LocalStorageService.kWebDAVPassword,
+    LocalStorageService.kWebDavAutoBackup,
+    LocalStorageService.kWebDavAutoSync,
+    LocalStorageService.kWebDavLastBackupDigest,
+    // 高频写入项
+    LocalStorageService.kWindowSize,
+    LocalStorageService.kPlayerVolume,
+    LocalStorageService.kDanmuSize,
+    LocalStorageService.kDanmuSpeed,
+    LocalStorageService.kDanmuArea,
+    LocalStorageService.kDanmuOpacity,
+    LocalStorageService.kDanmuStrokeWidth,
+    LocalStorageService.kDanmuTopMargin,
+    LocalStorageService.kDanmuBottomMargin,
+    LocalStorageService.kChatTextSize,
+    LocalStorageService.kChatTextGap,
+  };
+
+  /// 上一次备份内容的摘要，用于内容没变时跳过上传
+  static String? _lastBackupDigest;
+
+  static String? get _savedDigest => LocalStorageService.instance.getValue<String>(
+        LocalStorageService.kWebDavLastBackupDigest,
+        "",
+      );
+
+  /// 记录一次成功备份的内容摘要
+  ///
+  /// 手动备份也会调用，避免紧接着又触发一次内容相同的自动备份。
+  static Future<void> markBackedUp() async {
+    var digest = BackupArchive.contentDigest();
+    _lastBackupDigest = digest;
+    try {
+      await LocalStorageService.instance.setValue(
+        LocalStorageService.kWebDavLastBackupDigest,
+        digest,
+      );
+    } catch (e) {
+      Log.logPrint(e);
+    }
+  }
+
+  /// 内容与上次备份一致时返回 true
+  static bool _isBackupUnchanged() {
+    var saved = _lastBackupDigest ?? _savedDigest;
+    if (saved == null || saved.isEmpty) {
+      return false;
+    }
+    return saved == BackupArchive.contentDigest();
+  }
+
+  /// 清空备份摘要：自动备份文件被删除后，下次自动备份需要重新上传，
+  /// 否则会误以为「内容没变」而一直不上传
+  static Future<void> clearBackupDigest() async {
+    _lastBackupDigest = null;
+    try {
+      await LocalStorageService.instance.removeValue(
+        LocalStorageService.kWebDavLastBackupDigest,
+      );
+    } catch (e) {
+      Log.logPrint(e);
+    }
+  }
 
   static bool get autoBackupEnabled => LocalStorageService.instance.getValue(
         LocalStorageService.kWebDavAutoBackup,
@@ -676,13 +783,7 @@ class BackupScheduler {
       _subs.add(
         storage.settingsBox.watch().listen((event) {
           var key = "${event.key}";
-          // 同步基线、WebDAV 配置与开关自身的变化不触发任务
-          if (key == LocalStorageService.kWebDavSyncState ||
-              key == LocalStorageService.kWebDAVUri ||
-              key == LocalStorageService.kWebDAVUser ||
-              key == LocalStorageService.kWebDAVPassword ||
-              key == LocalStorageService.kWebDavAutoBackup ||
-              key == LocalStorageService.kWebDavAutoSync) {
+          if (_quietKeys.contains(key)) {
             return;
           }
           _onLocalChanged();
@@ -762,12 +863,17 @@ class BackupScheduler {
         if (paused || !autoBackupEnabled) {
           return;
         }
+        // 内容与上次备份一致时跳过上传，避免无意义的流量
+        if (_isBackupUnchanged()) {
+          return;
+        }
         var bytes = BackupArchive.exportBytes();
         await BackupClient.instance.upload(
           bytes,
           BackupClient.autoBackupFileName,
         );
-        // 旧版自动备份（平台名在后）删除，避免恢复列表出现重复项
+        await markBackedUp();
+        // 旧版自动备份删除，避免恢复列表出现重复项
         await BackupClient.instance.removeLegacyAutoBackup();
         SmartDialog.showToast("自动备份成功");
       });

@@ -41,7 +41,7 @@ class PageGridView extends StatelessWidget {
       Platform.isWindows || Platform.isLinux || Platform.isMacOS;
 
   /// 列表末尾的"加载更多"：作为滚动内容的一部分，只有滑动到底部才会出现
-  Widget buildLoadMore(BuildContext context) {
+  Widget _buildLoadMore(BuildContext context) {
     var visible = showLoadMore &&
         _desktop &&
         pageController.canLoadMore.value &&
@@ -91,7 +91,7 @@ class PageGridView extends StatelessWidget {
                   ),
                 ),
                 SliverToBoxAdapter(
-                  child: buildLoadMore(context),
+                  child: _buildLoadMore(context),
                 ),
               ],
             ),

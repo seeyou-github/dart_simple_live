@@ -76,9 +76,18 @@ class AudioNotificationService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
             ACTION_TOGGLE -> {
-                playing = !playing
-                toggleCallback?.invoke()
-                notifyUpdate()
+                // 由通知的 PendingIntent 拉起时系统要求尽快进入前台，
+                // 先无条件满足契约，再决定是否保留这个通知
+                startForegroundCompat()
+                val callback = toggleCallback
+                if (callback == null) {
+                    // Flutter 侧已不存在，避免留下一个点了没反应的常驻通知
+                    stopSelf()
+                } else {
+                    playing = !playing
+                    callback.invoke()
+                    notifyUpdate()
+                }
             }
 
             else -> {
@@ -127,12 +136,23 @@ class AudioNotificationService : Service() {
             )
         }
 
-        val toggleIntent = PendingIntent.getService(
-            this,
-            1,
-            Intent(this, AudioNotificationService::class.java).setAction(ACTION_TOGGLE),
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
-        )
+        val toggleIntent = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            // 必须用 getForegroundService：服务不在前台时用 getService 拉起
+            // 会走「后台服务」限制，Android 8+ 可能直接抛异常
+            PendingIntent.getForegroundService(
+                this,
+                1,
+                Intent(this, AudioNotificationService::class.java).setAction(ACTION_TOGGLE),
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+            )
+        } else {
+            PendingIntent.getService(
+                this,
+                1,
+                Intent(this, AudioNotificationService::class.java).setAction(ACTION_TOGGLE),
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+            )
+        }
 
         val builder = NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle(title.ifEmpty { "音频模式" })

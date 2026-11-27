@@ -544,10 +544,19 @@ class _CategoryPickerSheetState extends State<_CategoryPickerSheet> {
                   ),
           )
           .toList();
-      children.add(_buildGroup(context, "单个分类", items));
+      children.add(
+        _buildGroup(context, "单个分类", items, groupKey: "#singles"),
+      );
     }
     for (var category in normals) {
-      children.add(_buildGroup(context, category.name, category.children));
+      children.add(
+        _buildGroup(
+          context,
+          category.name,
+          category.children,
+          groupKey: "#parent:${category.id}",
+        ),
+      );
     }
 
     return ListView(
@@ -559,11 +568,13 @@ class _CategoryPickerSheetState extends State<_CategoryPickerSheet> {
   Widget _buildGroup(
     BuildContext context,
     String title,
-    List<LiveSubCategory> items,
-  ) {
+    List<LiveSubCategory> items, {
+    required String groupKey,
+  }) {
     const itemWidth = 76.0;
     const spacing = 8.0;
-    var isExpanded = _expanded.contains(title);
+    // 以分组标识而不是标题作为展开状态：不同分组可能重名
+    var isExpanded = _expanded.contains(groupKey);
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 16),
@@ -590,7 +601,7 @@ class _CategoryPickerSheetState extends State<_CategoryPickerSheet> {
                   if (hasMore && !isExpanded)
                     _buildShowAll(context, () {
                       setState(() {
-                        _expanded.add(title);
+                        _expanded.add(groupKey);
                       });
                     }),
                 ],

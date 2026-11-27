@@ -12,6 +12,7 @@ import 'dart:typed_data';
 
 import 'package:crypto/crypto.dart';
 import 'package:encrypt/encrypt.dart' as enc;
+import 'package:simple_live_app/app/log.dart';
 
 /// 编码结果的前缀，用来区分「已编码」和「原样保存」的字段。
 const String _tag = 'sl1:';
@@ -88,12 +89,14 @@ String unsealField(String stored) {
   try {
     var bytes = base64Url.decode(stored.substring(_tag.length));
     if (bytes.length <= 16) {
-      return '';
+      throw const FormatException("密文长度不正确");
     }
     var iv = enc.IV(Uint8List.sublistView(bytes, 0, 16));
     var body = enc.Encrypted(Uint8List.sublistView(bytes, 16));
     return _encrypter.decrypt(body, iv: iv);
-  } catch (_) {
+  } catch (e) {
+    // 解密失败会返回空串（等价于该字段被清空），必须留下日志便于排查
+    Log.logPrint("配置字段解密失败：$e");
     return '';
   }
 }

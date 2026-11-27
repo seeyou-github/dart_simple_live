@@ -335,29 +335,52 @@ Future<void> _waitNextFrameRasterized() async {
   await Future.delayed(const Duration(milliseconds: 16));
 }
 
+/// 注册 Hive 适配器；重复注册会被 Hive 抛错，这里忽略即可
+void _registerAdapterOnce<T>(TypeAdapter<T> adapter) {
+  try {
+    Hive.registerAdapter<T>(adapter);
+  } catch (e) {
+    Log.logPrint("适配器已注册：$e");
+  }
+}
+
 Future initServices() async {
   //播放器内核：只在真正需要播放前初始化即可，放到启动页期间完成
   MediaKit.ensureInitialized();
   // 音频模式的后台通知：注册通知栏按钮回调（仅 Android）
   AudioNotification.init();
 
-  Hive.registerAdapter(FollowUserAdapter());
-  Hive.registerAdapter(HistoryAdapter());
+  // 初始化失败后允许重试，因此每一步都要可重入：
+  // 已经注册过的适配器 / 服务不再重复注册，避免重试时二次抛错。
+  _registerAdapterOnce(FollowUserAdapter());
+  _registerAdapterOnce(HistoryAdapter());
 
   //包信息
   Utils.packageInfo = await PackageInfo.fromPlatform();
   //本地存储
-  Log.d("Init LocalStorage Service");
-  await Get.put(LocalStorageService()).init();
-  await Get.put(DBService()).init();
+  if (!Get.isRegistered<LocalStorageService>()) {
+    Log.d("Init LocalStorage Service");
+    await Get.put(LocalStorageService()).init();
+  }
+  if (!Get.isRegistered<DBService>()) {
+    await Get.put(DBService()).init();
+  }
   //初始化设置控制器
-  Get.put(AppSettingsController());
+  if (!Get.isRegistered<AppSettingsController>()) {
+    Get.put(AppSettingsController());
+  }
 
-  Get.put(BiliBiliAccountService());
+  if (!Get.isRegistered<BiliBiliAccountService>()) {
+    Get.put(BiliBiliAccountService());
+  }
 
-  Get.put(DouyinAccountService());
+  if (!Get.isRegistered<DouyinAccountService>()) {
+    Get.put(DouyinAccountService());
+  }
 
-  Get.put(FollowService());
+  if (!Get.isRegistered<FollowService>()) {
+    Get.put(FollowService());
+  }
 
   initCoreLog();
 
@@ -409,6 +432,9 @@ class AppBootstrap extends StatefulWidget {
 
 class _AppBootstrapState extends State<AppBootstrap> {
   var _ready = false;
+  var _retrying = false;
+  var _hiveReady = false;
+  String? _error;
 
   @override
   void initState() {
@@ -420,26 +446,63 @@ class _AppBootstrapState extends State<AppBootstrap> {
     try {
       // 旧数据迁移需要先于 Hive 初始化（仅 macOS/Linux 有效，Windows 直接返回）
       await migrateData();
-      await Hive.initFlutter(
-        (!Platform.isAndroid && !Platform.isIOS)
-            ? widget.appDir.path
-            : null,
-      );
+      // Hive 重复 init 会抛「already initialized」，重试时跳过
+      if (!_hiveReady) {
+        await Hive.initFlutter(
+          (!Platform.isAndroid && !Platform.isIOS)
+              ? widget.appDir.path
+              : null,
+        );
+        _hiveReady = true;
+      }
       await initServices();
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _ready = true;
+        _error = null;
+      });
     } catch (e, stack) {
       Log.e("初始化服务失败：$e", stack);
+      if (!mounted) {
+        return;
+      }
+      // 不再带着半初始化的状态进入主界面（会直接红屏且无提示），
+      // 停在启动页给出原因并允许重试。
+      setState(() {
+        _ready = false;
+        _error = "$e";
+      });
     }
+  }
+
+  Future<void> _retry() async {
+    if (_retrying) {
+      return;
+    }
+    setState(() {
+      _retrying = true;
+      _error = null;
+    });
+    await _initServices();
     if (!mounted) {
       return;
     }
     setState(() {
-      _ready = true;
+      _retrying = false;
     });
   }
 
   @override
   Widget build(BuildContext context) {
-    return _ready ? const MyApp() : const BootSplash();
+    if (_ready) {
+      return const MyApp();
+    }
+    if (_error != null) {
+      return BootError(message: _error!, onRetry: _retry);
+    }
+    return const BootSplash();
   }
 }
 
@@ -480,6 +543,69 @@ class BootSplash extends StatelessWidget {
                 ),
               ),
             ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// 启动失败页：初始化数据目录 / 数据库失败时给出原因并允许重试
+class BootError extends StatelessWidget {
+  const BootError({super.key, required this.message, required this.onRetry});
+
+  final String message;
+  final VoidCallback onRetry;
+
+  bool get _isDark =>
+      WidgetsBinding.instance.platformDispatcher.platformBrightness ==
+      Brightness.dark;
+
+  @override
+  Widget build(BuildContext context) {
+    var dark = _isDark;
+    var textColor = dark ? Colors.white70 : Colors.black87;
+    return MaterialApp(
+      debugShowCheckedModeBanner: false,
+      theme: ThemeData(brightness: dark ? Brightness.dark : Brightness.light),
+      home: Scaffold(
+        backgroundColor:
+            dark ? const Color(0xFF101012) : const Color(0xFFF7F7F9),
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 32),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Image.asset(
+                  "assets/images/logo.png",
+                  width: 72,
+                  height: 72,
+                ),
+                const SizedBox(height: 20),
+                Text(
+                  "启动失败",
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                    color: textColor,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  message,
+                  textAlign: TextAlign.center,
+                  maxLines: 6,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(fontSize: 12, color: textColor),
+                ),
+                const SizedBox(height: 20),
+                FilledButton.tonal(
+                  onPressed: onRetry,
+                  child: const Text("重试"),
+                ),
+              ],
+            ),
           ),
         ),
       ),

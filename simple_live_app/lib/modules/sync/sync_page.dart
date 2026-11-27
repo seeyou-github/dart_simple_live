@@ -85,6 +85,8 @@ class _SyncPageState extends State<SyncPage> {
           bytes,
           BackupClient.buildBackupFileName(),
         );
+        // 记录摘要，避免紧接着又触发一次内容相同的自动备份
+        await BackupScheduler.markBackedUp();
       });
       SmartDialog.showToast("备份成功");
     } catch (e) {
@@ -105,47 +107,50 @@ class _SyncPageState extends State<SyncPage> {
       SmartDialog.showToast("请先填写并保存 WebDAV 地址");
       return;
     }
+    // 整个流程（读列表 / 选择 / 下载恢复）都暂停自动备份与同步：
+    // 否则在选择文件的这段时间里，自动同步可能先把本地数据推上去，
+    // 恢复完成后再把刚恢复的内容覆盖回来。
     _busy = true;
-    List<BackupFile> files;
-    try {
-      files = await BackupClient.instance.listBackups();
-    } catch (e) {
-      _busy = false;
-      showBackupFailure(
-        "读取备份列表失败",
-        describeBackupError(e),
-        retry: _restore,
-      );
-      return;
-    }
-    _busy = false;
-    if (!mounted) {
-      return;
-    }
-    if (files.isEmpty) {
-      SmartDialog.showToast(
-        "云端暂无 ${BackupClient.platformLabel} 平台的备份文件",
-      );
-      return;
-    }
-    var picked = await _pickBackup(files);
-    if (picked == null) {
-      return;
-    }
-    if (!await _confirmRestore(picked.name)) {
-      return;
-    }
-
-    _busy = true;
-    // 恢复期间暂停自动备份 / 同步，避免把刚恢复的数据又覆盖回去
     BackupScheduler.paused = true;
     var task = const BackupTask(BackupTaskKind.restore);
-    BackupTaskCenter.start(task);
+    var started = false;
+    var applied = false;
     try {
+      List<BackupFile> files;
+      try {
+        files = await BackupClient.instance.listBackups();
+      } catch (e) {
+        showBackupFailure(
+          "读取备份列表失败",
+          describeBackupError(e),
+          retry: _restore,
+        );
+        return;
+      }
+      if (!mounted) {
+        return;
+      }
+      if (files.isEmpty) {
+        SmartDialog.showToast(
+          "云端暂无 ${BackupClient.platformLabel} 平台的备份文件",
+        );
+        return;
+      }
+      var picked = await _pickBackup(files);
+      if (picked == null) {
+        return;
+      }
+      if (!await _confirmRestore(picked.name)) {
+        return;
+      }
+
+      BackupTaskCenter.start(task);
+      started = true;
       await BackupTaskLock.run(() async {
         BackupTaskCenter.begin(task);
         var bytes = await BackupClient.instance.download(picked.name);
         var result = await BackupArchive.importBytes(bytes);
+        applied = true;
         // 恢复出的数据以备份生成时间为基准，避免覆盖云端较新的记录
         var basis =
             result.basisMillis ?? picked.modified?.millisecondsSinceEpoch ?? 0;
@@ -160,12 +165,16 @@ class _SyncPageState extends State<SyncPage> {
     } catch (e) {
       showBackupFailure("恢复失败", describeBackupError(e));
     } finally {
-      BackupTaskCenter.finish(task);
+      if (started) {
+        BackupTaskCenter.finish(task);
+      }
       BackupScheduler.paused = false;
       _busy = false;
-      // 恢复后本地数据已变化，安排一次同步与备份把结果推到云端
-      BackupScheduler.scheduleSync(force: true);
-      BackupScheduler.scheduleBackup();
+      if (applied) {
+        // 恢复后本地数据已变化，安排一次同步与备份把结果推到云端
+        BackupScheduler.scheduleSync(force: true);
+        BackupScheduler.scheduleBackup();
+      }
       if (mounted) {
         setState(() {});
       }
@@ -174,6 +183,9 @@ class _SyncPageState extends State<SyncPage> {
 
   /// 立即同步
   Future<void> _syncNow() async {
+    if (_busy) {
+      return;
+    }
     // 这里马上就会同步，不再另外排队
     await _saveConfig(scheduleSync: false);
     var result = await BackupSync.syncNow();
@@ -196,6 +208,10 @@ class _SyncPageState extends State<SyncPage> {
 
   /// 一键导出到本机文件
   Future<void> _export() async {
+    if (_busy) {
+      return;
+    }
+    _busy = true;
     try {
       var path = await BackupArchive.exportToFile();
       if (path == null) {
@@ -204,12 +220,17 @@ class _SyncPageState extends State<SyncPage> {
       }
       SmartDialog.showToast("已导出到 $path");
     } catch (e) {
-      showBackupFailure("导出失败", "$e");
+      showBackupFailure("导出失败", describeBackupError(e));
+    } finally {
+      _busy = false;
     }
   }
 
   /// 一键从本机文件导入（合并）
   Future<void> _import() async {
+    if (_busy) {
+      return;
+    }
     if (!await Get.dialog<bool>(
           AlertDialog(
             title: const Text("导入备份"),
@@ -233,6 +254,7 @@ class _SyncPageState extends State<SyncPage> {
         false) {
       return;
     }
+    _busy = true;
     try {
       var result = await BackupArchive.importFromFile();
       if (!result.applied) {
@@ -250,64 +272,158 @@ class _SyncPageState extends State<SyncPage> {
         result.note == null ? "导入成功" : "导入成功，但${result.note}",
       );
     } catch (e) {
-      showBackupFailure("导入失败", "$e");
+      showBackupFailure("导入失败", _readableError(e));
+    } finally {
+      _busy = false;
     }
   }
 
+  /// 去掉异常类名前缀，便于直接展示给用户
+  String _readableError(Object error) {
+    var text = describeBackupError(error);
+    var colon = text.indexOf(": ");
+    if (colon > 0 && colon < 24 && text.startsWith("Format")) {
+      return text.substring(colon + 2);
+    }
+    return text;
+  }
+
+  /// 选择云端备份文件（可删除）
   Future<BackupFile?> _pickBackup(List<BackupFile> files) async {
+    var items = List<BackupFile>.from(files);
+    var deleting = <String>{};
     return Get.dialog<BackupFile>(
-      AlertDialog(
-        title: Text("选择备份（${BackupClient.platformLabel}）"),
-        contentPadding: const EdgeInsets.symmetric(vertical: 12),
-        content: SizedBox(
-          width: double.maxFinite,
-          height: 320,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-                child: Text(
-                  "仅显示当前平台（${BackupClient.platformLabel}）的备份文件；"
-                  "其它平台的备份需先导出，再用「一键导入」",
-                  style: Get.textTheme.bodySmall?.copyWith(
-                    color: Get.theme.colorScheme.outline,
-                    fontSize: 12,
+      StatefulBuilder(
+        builder: (context, setState) {
+          return AlertDialog(
+            title: Text("选择备份（${BackupClient.platformLabel}）"),
+            contentPadding: const EdgeInsets.symmetric(vertical: 12),
+            content: SizedBox(
+              width: double.maxFinite,
+              height: 320,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                    child: Text(
+                      "仅显示当前平台（${BackupClient.platformLabel}）的备份文件；"
+                      "其它平台的备份需先导出，再用「一键导入」",
+                      style: Get.textTheme.bodySmall?.copyWith(
+                        color: Get.theme.colorScheme.outline,
+                        fontSize: 12,
+                      ),
+                    ),
                   ),
-                ),
+                  Expanded(
+                    child: items.isEmpty
+                        ? const Center(child: Text("备份文件已全部删除"))
+                        : ListView.builder(
+                            itemCount: items.length,
+                            itemBuilder: (context, index) {
+                              var file = items[index];
+                              var isDeleting = deleting.contains(file.name);
+                              return ListTile(
+                                leading: const Icon(Icons.archive_outlined),
+                                title: Text(
+                                  file.name,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                subtitle: Text(
+                                  "${_formatTime(file.modified)} · "
+                                  "${_formatSize(file.size)}",
+                                ),
+                                trailing: IconButton(
+                                  tooltip: "删除该备份",
+                                  onPressed: isDeleting
+                                      ? null
+                                      : () => _deleteBackup(
+                                            file,
+                                            setState: setState,
+                                            deleting: deleting,
+                                            items: items,
+                                          ),
+                                  icon: isDeleting
+                                      ? const SizedBox(
+                                          width: 18,
+                                          height: 18,
+                                          child: CircularProgressIndicator(
+                                            strokeWidth: 2,
+                                          ),
+                                        )
+                                      : Icon(
+                                          Remix.delete_bin_line,
+                                          size: 20,
+                                          color:
+                                              Get.theme.colorScheme.error,
+                                        ),
+                                ),
+                                onTap: isDeleting
+                                    ? null
+                                    : () => Get.back(result: file),
+                              );
+                            },
+                          ),
+                  ),
+                ],
               ),
-              Expanded(
-                child: ListView.builder(
-                  itemCount: files.length,
-                  itemBuilder: (context, index) {
-                    var file = files[index];
-                    return ListTile(
-                      leading: const Icon(Icons.archive_outlined),
-                      title: Text(
-                        file.name,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      subtitle: Text(
-                        "${_formatTime(file.modified)} · "
-                        "${_formatSize(file.size)}",
-                      ),
-                      onTap: () => Get.back(result: file),
-                    );
-                  },
-                ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Get.back(),
+                child: const Text("取消"),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  /// 删除云端备份文件（需要二次确认）
+  Future<void> _deleteBackup(
+    BackupFile file, {
+    required StateSetter setState,
+    required Set<String> deleting,
+    required List<BackupFile> items,
+  }) async {
+    var confirmed = await Get.dialog<bool>(
+          AlertDialog(
+            title: const Text("删除备份"),
+            content: Text("确定删除云端的「${file.name}」吗？删除后无法恢复。"),
+            actions: [
+              TextButton(
+                onPressed: () => Get.back(result: false),
+                child: const Text("取消"),
+              ),
+              TextButton(
+                onPressed: () => Get.back(result: true),
+                child: const Text("删除"),
               ),
             ],
           ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Get.back(),
-            child: const Text("取消"),
-          ),
-        ],
-      ),
-    );
+        ) ??
+        false;
+    if (!confirmed) {
+      return;
+    }
+    deleting.add(file.name);
+    setState(() {});
+    try {
+      await BackupClient.instance.delete(file.name);
+      items.removeWhere((e) => e.name == file.name);
+      // 自动备份被删后清掉摘要，否则下次自动备份会以为内容没变而不再上传
+      if (file.name == BackupClient.autoBackupFileName) {
+        await BackupScheduler.clearBackupDigest();
+      }
+      SmartDialog.showToast("已删除 ${file.name}");
+    } catch (e) {
+      showBackupFailure("删除失败", describeBackupError(e));
+    } finally {
+      deleting.remove(file.name);
+      setState(() {});
+    }
   }
 
   Future<bool> _confirmRestore(String name) async {
@@ -459,7 +575,7 @@ class _SyncPageState extends State<SyncPage> {
                                   borderRadius: AppStyle.radius8,
                                 ),
                               ),
-                              onPressed: busy ? null : _backup,
+                              onPressed: (busy || _busy) ? null : _backup,
                               child: Text(busy ? "正在备份" : "备份设置"),
                             ),
                           ),
@@ -471,7 +587,7 @@ class _SyncPageState extends State<SyncPage> {
                                   borderRadius: AppStyle.radius8,
                                 ),
                               ),
-                              onPressed: restoring ? null : _restore,
+                              onPressed: (restoring || _busy) ? null : _restore,
                               child: Text(restoring ? "正在恢复" : "恢复设置"),
                             ),
                           ),
@@ -483,7 +599,8 @@ class _SyncPageState extends State<SyncPage> {
                   Text(
                     "备份按平台区分：当前为 ${BackupClient.platformLabel}，"
                     "文件名带 ${BackupClient.platformPrefix} 前缀；"
-                    "恢复时只显示当前平台的备份",
+                    "恢复时只显示当前平台的备份。"
+                    "自动备份固定为 ${BackupClient.autoBackupFileName}，每次覆盖旧文件",
                     style: Get.textTheme.bodySmall?.copyWith(
                       color: Get.theme.colorScheme.outline,
                       fontSize: 12,
@@ -543,7 +660,7 @@ class _SyncPageState extends State<SyncPage> {
                           borderRadius: AppStyle.radius8,
                         ),
                       ),
-                      onPressed: syncing ? null : _syncNow,
+                      onPressed: (syncing || _busy) ? null : _syncNow,
                       icon: const Icon(Icons.sync, size: 18),
                       label: Text(syncing ? "正在同步" : "立即同步"),
                     );

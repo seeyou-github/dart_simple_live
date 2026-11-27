@@ -63,6 +63,16 @@ FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
   }
 
   switch (message) {
+    // 自定义：另一个进程再次启动时通过命名事件请求唤起本窗口
+    case WM_APP + 1: {
+      if (::IsIconic(hwnd)) {
+        ::ShowWindow(hwnd, SW_RESTORE);
+      } else {
+        ::ShowWindow(hwnd, SW_SHOW);
+      }
+      ::SetForegroundWindow(hwnd);
+      break;
+    }
     case WM_FONTCHANGE:
       flutter_controller_->engine()->ReloadSystemFonts();
       break;

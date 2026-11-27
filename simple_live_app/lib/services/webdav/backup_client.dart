@@ -113,8 +113,8 @@ class BackupClient {
   /// 手动备份文件名前缀
   static const backupNamePrefix = "SimpleLive_backup_";
 
-  /// 自动备份文件名前缀（同平台固定名称，每次覆盖）
-  static const autoBackupNamePrefix = "SimpleLive_AutoBackup";
+  /// 自动备份文件名（同平台固定名称，每次覆盖），如 `Windows_Autobackup.zip`
+  static const autoBackupNameSuffix = "Autobackup.zip";
 
   /// 当前平台标识（用于文件名前缀与界面提示）
   static String get platformLabel {
@@ -141,11 +141,18 @@ class BackupClient {
 
   /// 自动备份的固定文件名（同平台每次覆盖）
   static String get autoBackupFileName =>
-      "$platformPrefix$autoBackupNamePrefix.zip";
+      "$platformPrefix$autoBackupNameSuffix";
 
-  /// 旧版自动备份文件名（平台名在后），仅用于兼容旧文件与上传后清理
+  /// 旧版自动备份文件名，仅用于兼容与上传后清理：
+  /// * 第一版：`SimpleLive_AutoBackup_<平台>.zip`
+  /// * 中间版：`<平台>_SimpleLive_AutoBackup.zip`
   static String get legacyAutoBackupFileName =>
-      "${autoBackupNamePrefix}_$platformLabel.zip";
+      "SimpleLive_AutoBackup_$platformLabel.zip";
+
+  static String get _interimAutoBackupFileName =>
+      "$platformPrefix$_interimAutoBackupPrefix.zip";
+
+  static const _interimAutoBackupPrefix = "SimpleLive_AutoBackup";
 
   static String _filePath(String name) => "$folderPath/$name";
 
@@ -203,9 +210,33 @@ class BackupClient {
       await storage.setValue(LocalStorageService.kWebDAVPassword, password);
       changed = true;
     }
-    _clientConfig = null;
-    _client = null;
+    if (changed) {
+      // 配置变更后旧连接不再可用；正在上传时保留到本次请求结束
+      if (!_uploading) {
+        _closeClient();
+      } else {
+        _clientConfig = null;
+        _client = null;
+      }
+    }
     return changed;
+  }
+
+  /// 释放缓存的 WebDAV 连接
+  void dispose() => _closeClient();
+
+  void _closeClient() {
+    var client = _client;
+    _client = null;
+    _clientConfig = null;
+    if (client == null) {
+      return;
+    }
+    try {
+      client.c.close(force: true);
+    } catch (e) {
+      Log.logPrint(e);
+    }
   }
 
   Future<webdav.Client> _connect({bool force = false}) async {
@@ -309,26 +340,33 @@ class BackupClient {
 
   /// 判断备份文件是否属于当前平台
   ///
-  /// 新命名为 `<平台>_SimpleLive_backup_*.zip` / `<平台>_SimpleLive_AutoBackup.zip`；
-  /// 旧版自动备份是 `SimpleLive_AutoBackup_<平台>.zip`，一并兼容（同平台才算）。
+  /// 当前命名：`<平台>_SimpleLive_backup_*.zip` / `<平台>_Autobackup.zip`；
+  /// 历史自动备份命名也一并兼容（同平台才算）。
   static bool _isCurrentPlatformFile(String name) {
-    if (name == legacyAutoBackupFileName) {
+    if (name == autoBackupFileName ||
+        name == legacyAutoBackupFileName ||
+        name == _interimAutoBackupFileName) {
       return true;
     }
     if (!name.startsWith(platformPrefix)) {
       return false;
     }
-    return name.startsWith("$platformPrefix$backupNamePrefix") ||
-        name.startsWith("$platformPrefix$autoBackupNamePrefix");
+    return name.startsWith("$platformPrefix$backupNamePrefix");
   }
 
-  /// 上传新版自动备份后清理旧版文件，避免恢复列表出现两个同平台自动备份
+  /// 上传新版自动备份后清理历史命名的自动备份文件，
+  /// 避免恢复列表出现多个同平台自动备份
   Future<void> removeLegacyAutoBackup() async {
-    try {
-      var client = await _connect();
-      await client.remove(_filePath(legacyAutoBackupFileName));
-    } catch (e) {
-      // 不存在或服务器不支持删除都忽略，不影响备份结果
+    for (var name in [
+      legacyAutoBackupFileName,
+      _interimAutoBackupFileName,
+    ]) {
+      try {
+        var client = await _connect();
+        await client.remove(_filePath(name));
+      } catch (e) {
+        // 不存在或服务器不支持删除都忽略，不影响备份结果
+      }
     }
   }
 

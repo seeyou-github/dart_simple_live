@@ -3,11 +3,9 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:archive/archive.dart';
+import 'package:crypto/crypto.dart' as crypto;
 import 'package:file_picker/file_picker.dart';
-import 'package:flutter/foundation.dart';
 import 'package:get/get.dart';
-import 'package:path/path.dart' as p;
-import 'package:simple_live_app/app/app_dirs.dart';
 import 'package:simple_live_app/app/constant.dart';
 import 'package:simple_live_app/app/controller/app_settings_controller.dart';
 import 'package:simple_live_app/app/event_bus.dart';
@@ -40,6 +38,9 @@ class BackupArchive {
   /// 解压后总大小上限
   static const _maxTotalBytes = 64 * 1024 * 1024;
 
+  /// 压缩包体积上限：先卡住压缩包本身，避免几十 MB 的压缩包直接读进内存
+  static const _maxArchiveBytes = 32 * 1024 * 1024;
+
   /// 恢复设置时需要保留本机值的键：同步基线（本机状态，不应被旧备份覆盖）
   static const _keepLocalKeys = {LocalStorageService.kWebDavSyncState};
 
@@ -50,13 +51,21 @@ class BackupArchive {
     LocalStorageService.kWebDAVPassword,
   };
 
-  /// 组装备份包
-  static Uint8List exportBytes() {
+  /// 备份内容（不含生成时间等易变字段）
+  ///
+  /// 单独抽出来是为了能算「内容摘要」：包内 meta 带生成时间，
+  /// 直接对打包结果做摘要是永远不相等的。
+  static Map<String, Object?> collectContent() {
     var follows = DBService.instance
         .getFollowList()
         .map((e) => e.toJson())
         .toList();
-    var settings = LocalStorageService.instance.settingsBox.toMap();
+    // 两个纯本机状态不参与备份：
+    // * 同步基线（每次同步都会变，而且恢复时本就应该保留本机值）
+    // * 上次备份摘要（写摘要本身就会改变内容，导致摘要永远对不上）
+    var settings = LocalStorageService.instance.settingsBox.toMap()
+      ..remove(LocalStorageService.kWebDavSyncState)
+      ..remove(LocalStorageService.kWebDavLastBackupDigest);
     var account = {
       "bilibili": BiliBiliAccountService.instance.cookie,
       "douyin": DouyinAccountService.instance.cookie,
@@ -65,9 +74,25 @@ class BackupArchive {
         .map((e) => "$e")
         .where((e) => e.trim().isNotEmpty)
         .toList();
+    return {
+      "follows": follows,
+      "settings": settings,
+      "account": account,
+      "blockWords": blockWords,
+    };
+  }
 
+  /// 备份内容摘要：内容没变化时值不变，用于跳过重复上传
+  static String contentDigest() {
+    var text = jsonEncode(collectContent());
+    return crypto.sha1.convert(utf8.encode(text)).toString();
+  }
+
+  /// 组装备份包
+  static Uint8List exportBytes() {
+    var content = collectContent();
     var archive = Archive();
-    void addJson(String name, Object value) {
+    void addJson(String name, Object? value) {
       var bytes = utf8.encode(jsonEncode(value));
       archive.add(ArchiveFile(name, bytes.length, bytes));
     }
@@ -78,10 +103,10 @@ class BackupArchive {
       "time": DateTime.now().millisecondsSinceEpoch,
       "version": 1,
     });
-    addJson(followsFileName, follows);
-    addJson(settingsFileName, settings);
-    addJson(accountFileName, account);
-    addJson(blockWordsFileName, blockWords);
+    addJson(followsFileName, content["follows"]);
+    addJson(settingsFileName, content["settings"]);
+    addJson(accountFileName, content["account"]);
+    addJson(blockWordsFileName, content["blockWords"]);
 
     var encoded = ZipEncoder().encode(archive);
     return Uint8List.fromList(encoded);
@@ -93,10 +118,19 @@ class BackupArchive {
   /// 的说明），完全成功时为 null；[BackupImportResult.basisMillis] 是备份
   /// 生成时间，供同步时判断「哪边更新」使用。
   static Future<BackupImportResult> importBytes(Uint8List bytes) async {
-    if (bytes.length > _maxTotalBytes) {
+    if (bytes.length > _maxArchiveBytes) {
       throw const FormatException("数据包过大");
     }
     var archive = ZipDecoder().decodeBytes(bytes);
+    // 先按头部记录的未压缩大小做总闸：压缩率异常的包（zip 炸弹）
+    // 在读取内容之前就会被拒绝，不会等到解压完才发现
+    var declaredBytes = 0;
+    for (var file in archive) {
+      declaredBytes += file.size;
+      if (declaredBytes > _maxTotalBytes) {
+        throw const FormatException("数据包过大");
+      }
+    }
     var meta = _decode(archive, metaFileName);
     if (meta is! Map || meta["type"] != _type) {
       throw const FormatException("不是有效的备份文件");
@@ -314,25 +348,19 @@ class BackupArchive {
   }
 
   /// 一键导出到本机文件；返回保存路径，取消时返回 null
+  ///
+  /// 全平台统一走系统「另存为」对话框，由用户决定保存位置；
+  /// Android / iOS 走 SAF，保存时需要直接带上文件内容。
   static Future<String?> exportToFile() async {
     var bytes = exportBytes();
-    var inlineSave = Platform.isAndroid || Platform.isIOS || kIsWeb;
-    String? path;
-    if (Platform.isWindows) {
-      var dir = await AppDirs.appDataSubdirectory("exports");
-      path = p.join(
-        dir.path,
-        "${BackupClient.platformPrefix}SimpleLive_backup_"
-        "${DateTime.now().millisecondsSinceEpoch ~/ 1000}.zip",
-      );
-    } else {
-      path = await FilePicker.platform.saveFile(
-        allowedExtensions: ["zip"],
-        type: FileType.custom,
-        fileName: "${BackupClient.platformPrefix}SimpleLive_backup.zip",
-        bytes: inlineSave ? bytes : null,
-      );
-    }
+    var inlineSave = Platform.isAndroid || Platform.isIOS;
+    var path = await FilePicker.platform.saveFile(
+      dialogTitle: "保存备份",
+      allowedExtensions: ["zip"],
+      type: FileType.custom,
+      fileName: "${BackupClient.platformPrefix}SimpleLive_backup.zip",
+      bytes: inlineSave ? bytes : null,
+    );
     if (path == null) {
       return null;
     }
@@ -355,7 +383,12 @@ class BackupArchive {
     if (path == null) {
       return const BackupImportResult.cancelled();
     }
-    return importBytes(await File(path).readAsBytes());
+    var file = File(path);
+    // 先按文件长度拦一次，避免超大文件一次性读进内存
+    if (await file.length() > _maxArchiveBytes) {
+      throw const FormatException("数据包过大");
+    }
+    return importBytes(await file.readAsBytes());
   }
 }
 

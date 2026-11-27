@@ -109,6 +109,12 @@ class BasePageController<T> extends BaseController {
   var list = <T>[].obs;
   DateTime? _lastRefreshAt;
 
+  /// 请求代数：每次主动重载都会递增，用于丢弃过期请求的结果。
+  ///
+  /// 切换分类这类主动操作不等上一次请求结束，旧请求返回后因为代数不匹配
+  /// 会被直接丢弃，避免出现「白屏」或把上一个分类的数据刷到界面上。
+  int _requestToken = 0;
+
   Future refreshData() async {
     final now = DateTime.now();
     final lastRefreshAt = _lastRefreshAt;
@@ -120,27 +126,28 @@ class BasePageController<T> extends BaseController {
     _lastRefreshAt = now;
     currentPage = 1;
     list.value = [];
-    await loadData();
+    await loadData(restart: true);
   }
 
   /// 重新加载第一页数据，不受刷新冷却限制（用于切换分类等主动操作）。
   Future reloadFirstPage() async {
-    // 若上一次加载尚未结束，稍等它完成，避免被 loadding 直接挡回。
-    var waited = 0;
-    while (loadding && waited < 3000) {
-      await Future.delayed(const Duration(milliseconds: 100));
-      waited += 100;
-    }
     currentPage = 1;
     list.value = [];
     pageEmpty.value = false;
     pageError.value = false;
-    await loadData();
+    await loadData(restart: true);
   }
 
-  Future loadData() async {
+  /// 加载数据
+  ///
+  /// [restart] 为 true 时作废正在进行的请求，由本次请求接管（主动重载）；
+  /// 否则在加载中直接忽略，避免重复请求（分页加载）。
+  Future loadData({bool restart = false}) async {
+    if (loadding && !restart) {
+      return;
+    }
+    final token = ++_requestToken;
     try {
-      if (loadding) return;
       loadding = true;
       pageError.value = false;
       pageEmpty.value = false;
@@ -150,6 +157,10 @@ class BasePageController<T> extends BaseController {
       pageLoadding.value = page == 1;
 
       var result = await getData(page, pageSize);
+      // 已被更晚发起的请求取代，结果作废
+      if (token != _requestToken) {
+        return;
+      }
       // 先赋值：首页始终替换列表，避免残留旧数据造成重复。
       if (page == 1) {
         list.value = result;
@@ -168,10 +179,16 @@ class BasePageController<T> extends BaseController {
         }
       }
     } catch (e, stackTrace) {
+      if (token != _requestToken) {
+        return;
+      }
       handleError(e, showPageError: currentPage == 1, stackTrace: stackTrace);
     } finally {
-      loadding = false;
-      pageLoadding.value = false;
+      // 只有最新一次请求负责复位加载状态
+      if (token == _requestToken) {
+        loadding = false;
+        pageLoadding.value = false;
+      }
     }
   }
 

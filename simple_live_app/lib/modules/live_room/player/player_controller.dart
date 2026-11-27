@@ -433,6 +433,8 @@ mixin PlayerSystemMixin on PlayerMixin, PlayerStateMixin, PlayerDanmakuMixin {
 
   /// 关闭后台音频通知
   Future<void> stopAudioNotification() async {
+    // 清掉回调，避免静态引用一直持有已关闭的播放器
+    AudioNotification.onTogglePlay = null;
     await AudioNotification.instance.hide();
   }
 
