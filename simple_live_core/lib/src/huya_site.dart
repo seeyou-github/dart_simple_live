@@ -33,7 +33,7 @@ class HuyaSite implements LiveSite {
   String id = "huya";
 
   @override
-  String name = "虎牙直播";
+  String name = "虎牙";
 
   @override
   LiveDanmaku getDanmaku() => HuyaDanmaku();

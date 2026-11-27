@@ -23,7 +23,7 @@ class DouyuSite implements LiveSite {
   String id = "douyu";
 
   @override
-  String name = "斗鱼直播";
+  String name = "斗鱼";
 
   @override
   LiveDanmaku getDanmaku() => DouyuDanmaku();

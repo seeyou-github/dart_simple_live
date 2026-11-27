@@ -420,7 +420,7 @@ class SettingsPage extends GetView<SettingsController> {
           () => HighlightListTile(
             focusNode: controller.bilibiliFoucsNode,
             autofocus: controller.bilibiliFoucsNode.isFoucsed.value,
-            title: "哔哩哔哩账号",
+            title: "B站账号",
             subtitle: BiliBiliAccountService.instance.logined.value
                 ? "已登录：${BiliBiliAccountService.instance.name.value}"
                 : "未登录，点击登录",

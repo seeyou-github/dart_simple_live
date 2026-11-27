@@ -28,8 +28,8 @@ class AppNavigator {
         !BiliBiliAccountService.instance.logined.value &&
         AppSettingsController.instance.bilibiliLoginTip.value) {
       var result = await Utils.showAlertDialog(
-        "哔哩哔哩需要登录才能观看高清直播，是否前往登录？",
-        title: "登录哔哩哔哩",
+        "B站需要登录才能观看高清直播，是否前往登录？",
+        title: "登录B站",
         actions: [
           TextButton(
             onPressed: () {

@@ -19,7 +19,7 @@ class AccountPage extends GetView<AccountController> {
           const Padding(
             padding: AppStyle.edgeInsetsA12,
             child: Text(
-              "哔哩哔哩账号需要登录才能看高清晰度的直播。",
+              "B站账号需要登录才能看高清晰度的直播。",
               textAlign: TextAlign.center,
             ),
           ),
@@ -30,7 +30,7 @@ class AccountPage extends GetView<AccountController> {
                 width: 36,
                 height: 36,
               ),
-              title: const Text("哔哩哔哩"),
+              title: const Text("B站"),
               subtitle: Text(BiliBiliAccountService.instance.name.value),
               trailing: BiliBiliAccountService.instance.logined.value
                   ? const Icon(Icons.logout)
@@ -44,7 +44,7 @@ class AccountPage extends GetView<AccountController> {
               width: 36,
               height: 36,
             ),
-            title: const Text("斗鱼直播"),
+            title: const Text("斗鱼"),
             subtitle: const Text("无需登录"),
             enabled: false,
             trailing: const Icon(Icons.chevron_right),
@@ -55,7 +55,7 @@ class AccountPage extends GetView<AccountController> {
               width: 36,
               height: 36,
             ),
-            title: const Text("虎牙直播"),
+            title: const Text("虎牙"),
             subtitle: const Text("无需登录"),
             enabled: false,
             trailing: const Icon(Icons.chevron_right),
@@ -67,7 +67,7 @@ class AccountPage extends GetView<AccountController> {
                 width: 36,
                 height: 36,
               ),
-              title: const Text("抖音直播"),
+              title: const Text("抖音"),
               subtitle: Text(DouyinAccountService.instance.hasCookie.value
                   ? "已自定义（${DouyinAccountService.instance.cookie.length} 字符）"
                   : "使用默认 ttwid"),

@@ -281,7 +281,7 @@ class SyncService extends GetxService {
       var cookie = jsonBody['cookie'];
       BiliBiliAccountService.instance.setCookie(cookie);
       BiliBiliAccountService.instance.loadUserInfo();
-      SmartDialog.showToast('已同步哔哩哔哩账号');
+      SmartDialog.showToast('已同步B站账号');
       return toJsonResponse({'status': true, 'message': 'success'});
     } catch (e) {
       return toJsonResponse({'status': false, 'message': e.toString()});

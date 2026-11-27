@@ -30,7 +30,7 @@ class ParsePage extends GetView<ParseController> {
                   textInputAction: TextInputAction.go,
                   decoration: InputDecoration(
                     border: const OutlineInputBorder(),
-                    hintText: "输入或粘贴哔哩哔哩直播/虎牙直播/斗鱼直播/抖音直播的链接",
+                    hintText: "输入或粘贴B站/虎牙/斗鱼/抖音的链接",
                     contentPadding: AppStyle.edgeInsetsA12,
                     enabledBorder: OutlineInputBorder(
                       borderSide: BorderSide(
@@ -69,7 +69,7 @@ class ParsePage extends GetView<ParseController> {
                   textInputAction: TextInputAction.go,
                   decoration: InputDecoration(
                     border: const OutlineInputBorder(),
-                    hintText: "输入或粘贴哔哩哔哩直播/虎牙直播/斗鱼直播/抖音直播的链接",
+                    hintText: "输入或粘贴B站/虎牙/斗鱼/抖音的链接",
                     contentPadding: AppStyle.edgeInsetsA12,
                     enabledBorder: OutlineInputBorder(
                       borderSide: BorderSide(
@@ -96,15 +96,15 @@ class ParsePage extends GetView<ParseController> {
           const Padding(
             padding: AppStyle.edgeInsetsV12,
             child: SelectableText('''支持以下类型的链接解析：
-哔哩哔哩：
+B站：
 https://live.bilibili.com/xxxxx
 https://b23.tv/xxxxx
-虎牙直播：
+虎牙：
 https://www.huya.com/xxxxx
-斗鱼直播：
+斗鱼：
 https://www.douyu.com/xxxxx
 https://www.douyu.com/topic/xxx?rid=xxx
-抖音直播：
+抖音：
 https://v.douyin.com/xxxxx
 https://live.douyin.com/xxxxx
 https://webcast.amemv.com/webcast/reflow/xxxxx

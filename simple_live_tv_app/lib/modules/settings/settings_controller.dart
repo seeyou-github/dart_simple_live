@@ -55,7 +55,7 @@ class SettingsController extends BaseController
   var versionFocusNode = AppFocusNode();
   void bilibiliTap() async {
     if (BiliBiliAccountService.instance.logined.value) {
-      var result = await Utils.showAlertDialog("确定要退出哔哩哔哩账号吗？", title: "退出登录");
+      var result = await Utils.showAlertDialog("确定要退出B站账号吗？", title: "退出登录");
       if (result) {
         BiliBiliAccountService.instance.logout();
       }

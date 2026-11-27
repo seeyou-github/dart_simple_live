@@ -10,7 +10,7 @@ class BiliBiliQRLoginPage extends GetView<BiliBiliQRLoginController> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text("哔哩哔哩账号登录")),
+      appBar: AppBar(title: const Text("B站账号登录")),
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         mainAxisAlignment: MainAxisAlignment.center,
@@ -70,7 +70,7 @@ class BiliBiliQRLoginPage extends GetView<BiliBiliQRLoginController> {
           const Padding(
             padding: AppStyle.edgeInsetsA24,
             child: Text(
-              "请使用哔哩哔哩手机客户端扫描二维码登录",
+              "请使用B站手机客户端扫描二维码登录",
               textAlign: TextAlign.center,
             ),
           ),

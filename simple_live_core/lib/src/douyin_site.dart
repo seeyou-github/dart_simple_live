@@ -12,7 +12,7 @@ class DouyinSite implements LiveSite {
   String id = "douyin";
 
   @override
-  String name = "抖音直播";
+  String name = "抖音";
 
   @override
   LiveDanmaku getDanmaku() => DouyinDanmaku();
@@ -792,7 +792,7 @@ class DouyinSite implements LiveSite {
       },
     );
     if (result == "" || result == 'blocked') {
-      throw Exception("抖音直播搜索被限制，请稍后再试");
+      throw Exception("抖音搜索被限制，请稍后再试");
     }
     var items = <LiveRoomItem>[];
     for (var item in result["data"] ?? []) {

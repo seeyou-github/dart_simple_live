@@ -166,7 +166,7 @@ class SyncController extends BaseController {
       var cookie = jsonBody['cookie'];
       BiliBiliAccountService.instance.setCookie(cookie);
       BiliBiliAccountService.instance.loadUserInfo();
-      SmartDialog.showToast('已同步哔哩哔哩账号');
+      SmartDialog.showToast('已同步B站账号');
     } catch (e) {
       SmartDialog.showToast("同步失败:$e");
       Log.logPrint(e);

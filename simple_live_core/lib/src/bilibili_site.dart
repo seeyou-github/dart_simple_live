@@ -22,7 +22,7 @@ class BiliBiliSite implements LiveSite {
   String id = "bilibili";
 
   @override
-  String name = "哔哩哔哩直播";
+  String name = "B站直播";
 
   String cookie = "";
   int userId = 0;
@@ -187,7 +187,7 @@ class BiliBiliSite implements LiveSite {
     var code = int.tryParse((result["code"] ?? 0).toString()) ?? 0;
     if (code != 0) {
       throw CoreError(
-        "哔哩哔哩接口返回错误($code)",
+        "B站接口返回错误($code)",
         method: "GET",
         url: url,
         queryParameters: queryParameters,

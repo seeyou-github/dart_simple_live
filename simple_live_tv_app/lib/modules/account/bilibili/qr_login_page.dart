@@ -32,7 +32,7 @@ class BiliBiliQRLoginPage extends GetView<BiliBiliQRLoginController> {
               ),
               AppStyle.hGap32,
               Text(
-                "登录哔哩哔哩",
+                "登录B站",
                 style: AppStyle.titleStyleWhite.copyWith(
                   fontSize: 36.w,
                   fontWeight: FontWeight.bold,
@@ -124,7 +124,7 @@ class BiliBiliQRLoginPage extends GetView<BiliBiliQRLoginController> {
                 Padding(
                   padding: AppStyle.edgeInsetsA24,
                   child: Text(
-                    "请使用哔哩哔哩手机客户端扫描二维码登录\n必须登录后才能观看哔哩哔哩直播",
+                    "请使用B站手机客户端扫描二维码登录\n必须登录后才能观看B站直播",
                     textAlign: TextAlign.center,
                     style: TextStyle(fontSize: 32.w),
                   ),

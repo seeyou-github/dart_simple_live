@@ -7,25 +7,25 @@ class Sites {
     Constant.kBiliBili: Site(
       id: Constant.kBiliBili,
       logo: "assets/images/bilibili_2.png",
-      name: "哔哩哔哩",
+      name: "B站",
       liveSite: BiliBiliSite(),
     ),
     Constant.kDouyu: Site(
       id: Constant.kDouyu,
       logo: "assets/images/douyu.png",
-      name: "斗鱼直播",
+      name: "斗鱼",
       liveSite: DouyuSite(),
     ),
     Constant.kHuya: Site(
       id: Constant.kHuya,
       logo: "assets/images/huya.png",
-      name: "虎牙直播",
+      name: "虎牙",
       liveSite: HuyaSite(),
     ),
     Constant.kDouyin: Site(
       id: Constant.kDouyin,
       logo: "assets/images/douyin.png",
-      name: "抖音直播",
+      name: "抖音",
       liveSite: DouyinSite(),
     ),
   };

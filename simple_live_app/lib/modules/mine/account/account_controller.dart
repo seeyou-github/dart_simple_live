@@ -12,7 +12,7 @@ import 'package:simple_live_core/simple_live_core.dart';
 class AccountController extends GetxController {
   void bilibiliTap() async {
     if (BiliBiliAccountService.instance.logined.value) {
-      var result = await Utils.showAlertDialog("确定要退出哔哩哔哩账号吗？", title: "退出登录");
+      var result = await Utils.showAlertDialog("确定要退出B站账号吗？", title: "退出登录");
       if (result) {
         BiliBiliAccountService.instance.logout();
       }
@@ -24,7 +24,7 @@ class AccountController extends GetxController {
 
   void bilibiliLogin() {
     Utils.showBottomSheet(
-      title: "登录哔哩哔哩",
+      title: "登录B站",
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -44,7 +44,7 @@ class AccountController extends GetxController {
           ListTile(
             leading: const Icon(Icons.qr_code),
             title: const Text("扫码登录"),
-            subtitle: const Text("使用哔哩哔哩APP扫描二维码登录"),
+            subtitle: const Text("使用B站APP扫描二维码登录"),
             trailing: const Icon(Icons.chevron_right),
             onTap: () {
               Get.back();

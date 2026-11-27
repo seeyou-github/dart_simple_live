@@ -10,7 +10,7 @@ class BiliBiliWebLoginPage extends GetView<BiliBiliWebLoginController> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text("哔哩哔哩账号登录"),
+        title: const Text("B站账号登录"),
         actions: [
           TextButton.icon(
             onPressed: controller.toQRLogin,
