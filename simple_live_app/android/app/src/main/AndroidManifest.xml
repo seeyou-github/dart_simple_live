@@ -3,6 +3,11 @@
    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"/>
    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"/>
    <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" />
+   <!-- 音频模式：后台播放 + 通知栏控制 -->
+   <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+   <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
+   <uses-permission android:name="android.permission.WAKE_LOCK" />
+   <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <application
         android:label="Live"
         android:name="${applicationName}"
@@ -33,6 +38,11 @@
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
         </activity>
+        <!-- 音频模式：前台服务，常驻通知显示直播间信息与播放控制 -->
+        <service
+            android:name=".AudioNotificationService"
+            android:foregroundServiceType="mediaPlayback"
+            android:exported="false" />
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
         <meta-data

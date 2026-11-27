@@ -20,6 +20,7 @@ import 'package:simple_live_app/app/controller/base_controller.dart';
 import 'package:simple_live_app/app/custom_throttle.dart';
 import 'package:simple_live_app/app/log.dart';
 import 'package:simple_live_app/app/utils.dart';
+import 'package:simple_live_app/services/audio_mode/audio_notification.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 import 'package:window_manager/window_manager.dart';
 
@@ -103,6 +104,15 @@ mixin PlayerStateMixin on PlayerMixin {
 
   /// 是否处于窗口全屏（仅视频铺满窗口客户区，不改变系统窗口状态，仅桌面端可用）
   RxBool windowFullScreenState = false.obs;
+
+  /// 是否处于音频模式（关闭视频解码，只播放声音，画面用黑屏替代）
+  RxBool audioMode = false.obs;
+
+  /// 音频模式是否由用户手动开启：自动进入的会在回到前台 / 窗口重新获得焦点时退出
+  bool audioModeManual = false;
+
+  /// 桌面端最小化 / 失去焦点后延迟进入音频模式的计时器
+  Timer? audioModeDelayTimer;
 
   /// 是否应显示全屏播放器 UI（系统全屏 或 窗口全屏）
   bool get isFullScreenUI => fullScreenState.value || windowFullScreenState.value;
@@ -241,6 +251,10 @@ mixin PlayerDanmakuMixin on PlayerStateMixin {
   }
 
   void addDanmaku(List<DanmakuContentItem> items) {
+    // 音频模式下不刷新弹幕，省掉画布重绘
+    if (audioMode.value) {
+      return;
+    }
     if (!showDanmakuState.value) {
       return;
     }
@@ -295,6 +309,131 @@ mixin PlayerSystemMixin on PlayerMixin, PlayerStateMixin, PlayerDanmakuMixin {
     }
 
     await WakelockPlus.disable();
+  }
+
+  /// 音频模式通知栏使用的直播间信息，由 LiveRoomController 覆盖
+  ({String id, String title, String artist, String avatar})?
+      get audioNotificationInfo => null;
+
+  /// 进入音频模式：关闭视频解码、停止弹幕刷新，移动端显示常驻通知
+  ///
+  /// [manual] 为用户手动开启：回到前台 / 窗口重新获得焦点时不会自动退出。
+  Future<void> enterAudioMode({bool manual = false}) async {
+    audioModeDelayTimer?.cancel();
+    audioModeDelayTimer = null;
+    audioModeManual = audioModeManual || manual;
+    if (audioMode.value) {
+      return;
+    }
+    audioMode.value = true;
+    danmakuController?.clear();
+    // 只听声音，屏幕不需要常亮
+    await WakelockPlus.disable();
+    await setVideoTrackEnabled(false);
+    await startAudioNotification();
+  }
+
+  /// 退出音频模式：恢复视频解码
+  Future<void> exitAudioMode({bool manual = false}) async {
+    audioModeDelayTimer?.cancel();
+    audioModeDelayTimer = null;
+    if (manual) {
+      audioModeManual = false;
+    }
+    if (!audioMode.value) {
+      await stopAudioNotification();
+      return;
+    }
+    audioMode.value = false;
+    audioModeManual = false;
+    await setVideoTrackEnabled(true);
+    if (player.state.playing) {
+      await WakelockPlus.enable();
+    }
+    await stopAudioNotification();
+  }
+
+  /// 音频模式开关（移动端控制条按钮）
+  Future<void> toggleAudioMode() async {
+    if (audioMode.value) {
+      await exitAudioMode(manual: true);
+      SmartDialog.showToast("已退出音频模式");
+    } else {
+      await enterAudioMode(manual: true);
+      SmartDialog.showToast("已进入音频模式，仅播放声音");
+    }
+  }
+
+  /// 开关视频解码轨道：关闭后不再解码、不再产生画面，CPU / GPU 占用大幅下降
+  Future<void> setVideoTrackEnabled(bool enabled) async {
+    try {
+      if (player.platform is NativePlayer) {
+        await (player.platform as NativePlayer)
+            .setProperty('vid', enabled ? 'auto' : 'no');
+      }
+    } catch (e) {
+      Log.logPrint(e);
+    }
+  }
+
+  /// 桌面端：窗口最小化或失去焦点 5 秒后自动进入音频模式
+  void scheduleAutoAudioMode() {
+    if (Platform.isAndroid || Platform.isIOS) {
+      return;
+    }
+    // 用户开启了「后台暂停」时保持暂停，不再自动切音频模式
+    if (AppSettingsController.instance.playerAutoPause.value) {
+      return;
+    }
+    if (audioMode.value || audioModeManual) {
+      return;
+    }
+    audioModeDelayTimer?.cancel();
+    audioModeDelayTimer = Timer(const Duration(seconds: 5), () {
+      audioModeDelayTimer = null;
+      if (!audioModeManual) {
+        enterAudioMode();
+      }
+    });
+  }
+
+  /// 桌面端：窗口重新获得焦点 / 还原时退出自动进入的音频模式
+  void cancelAutoAudioMode() {
+    audioModeDelayTimer?.cancel();
+    audioModeDelayTimer = null;
+    if (audioMode.value && !audioModeManual) {
+      exitAudioMode();
+    }
+  }
+
+  /// 开启后台音频通知（仅 Android）
+  Future<void> startAudioNotification() async {
+    if (!AudioNotification.supported) {
+      return;
+    }
+    var info = audioNotificationInfo;
+    if (info == null) {
+      return;
+    }
+    // 通知栏按钮与播放器状态联动
+    AudioNotification.onTogglePlay = () async {
+      if (player.state.playing) {
+        await player.pause();
+      } else {
+        await player.play();
+      }
+    };
+    await AudioNotification.instance.show(
+      title: info.title,
+      artist: info.artist,
+      avatar: info.avatar,
+      playing: player.state.playing,
+    );
+  }
+
+  /// 关闭后台音频通知
+  Future<void> stopAudioNotification() async {
+    await AudioNotification.instance.hide();
   }
 
   /// 进入全屏
@@ -722,8 +861,15 @@ class PlayerController extends BaseController
 
     _playingSubscription = player.stream.playing.listen((event) {
       if (event) {
-        WakelockPlus.enable();
+        // 音频模式下屏幕无需常亮
+        if (!audioMode.value) {
+          WakelockPlus.enable();
+        }
         Log.d("Playing");
+      }
+      if (audioMode.value) {
+        // 同步通知栏的播放 / 暂停状态
+        AudioNotification.instance.setPlaying(event);
       }
     });
 

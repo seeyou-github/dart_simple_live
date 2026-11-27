@@ -20,6 +20,7 @@ import 'package:simple_live_app/models/db/follow_user.dart';
 import 'package:simple_live_app/models/db/history.dart';
 import 'package:simple_live_app/modules/live_room/player/player_controller.dart';
 import 'package:simple_live_app/modules/settings/danmu_settings_page.dart';
+import 'package:simple_live_app/services/audio_mode/audio_notification.dart';
 import 'package:simple_live_app/services/db_service.dart';
 import 'package:simple_live_app/services/follow_service.dart';
 import 'package:simple_live_app/widgets/desktop_refresh_button.dart';
@@ -27,8 +28,10 @@ import 'package:simple_live_app/widgets/follow_user_item.dart';
 import 'package:simple_live_core/simple_live_core.dart';
 import 'package:url_launcher/url_launcher_string.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
+import 'package:window_manager/window_manager.dart';
 
-class LiveRoomController extends PlayerController with WidgetsBindingObserver {
+class LiveRoomController extends PlayerController
+    with WidgetsBindingObserver, WindowListener {
   final Site pSite;
   final String pRoomId;
   late LiveDanmaku liveDanmaku;
@@ -110,6 +113,13 @@ class LiveRoomController extends PlayerController with WidgetsBindingObserver {
   @override
   void onInit() {
     WidgetsBinding.instance.addObserver(this);
+    // 桌面端：最小化 / 失去焦点时进入音频模式，恢复时退出
+    if (!Platform.isAndroid && !Platform.isIOS) {
+      windowManager.addListener(this);
+    } else {
+      // 提前要通知权限，进入后台切音频模式时才能显示常驻通知
+      AudioNotification.instance.ensurePermission();
+    }
     if (FollowService.instance.followList.isEmpty) {
       FollowService.instance.loadData();
     }
@@ -230,10 +240,13 @@ class LiveRoomController extends PlayerController with WidgetsBindingObserver {
 
       messages.add(msg);
 
-      WidgetsBinding.instance.addPostFrameCallback(
-        (_) => chatScrollToBottom(),
-      );
-      if (!liveStatus.value || isBackground) {
+      if (!isBackground && !audioMode.value) {
+        WidgetsBinding.instance.addPostFrameCallback(
+          (_) => chatScrollToBottom(),
+        );
+      }
+      // 音频模式 / 后台时不再往弹幕画布加内容
+      if (!liveStatus.value || isBackground || audioMode.value) {
         return;
       }
 
@@ -432,6 +445,10 @@ class LiveRoomController extends PlayerController with WidgetsBindingObserver {
     await initializePlayer();
 
     await player.open(Playlist(mediaList));
+    // 音频模式下保持关闭视频解码（换线路 / 刷新会重新打开解码器）
+    if (audioMode.value) {
+      await setVideoTrackEnabled(false);
+    }
   }
 
   void setPlayer() async {
@@ -1007,17 +1024,75 @@ ${error?.stackTrace}''');
   void didChangeAppLifecycleState(AppLifecycleState state) {
     super.didChangeAppLifecycleState(state);
 
-    if (state == AppLifecycleState.paused) {
+    if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.hidden) {
       Log.d("进入后台");
       //进入后台，关闭弹幕
       danmakuController?.clear();
       isBackground = true;
+      if (Platform.isAndroid || Platform.isIOS) {
+        // 移动端进入后台：直接切音频模式，由前台服务保活并显示通知。
+        // 用户显式设置了「后台暂停」时保持暂停，不自动切音频模式。
+        if (!AppSettingsController.instance.playerAutoPause.value) {
+          enterAudioMode();
+        }
+      } else {
+        // 桌面端等窗口状态一起判断（最小化 / 失焦 5 秒后进入）
+        scheduleAutoAudioMode();
+      }
     } else
     //返回前台
     if (state == AppLifecycleState.resumed) {
       Log.d("返回前台");
       isBackground = false;
+      if (Platform.isAndroid || Platform.isIOS) {
+        if (audioMode.value && !audioModeManual) {
+          exitAudioMode();
+        }
+      } else {
+        cancelAutoAudioMode();
+      }
     }
+  }
+
+  /// 音频模式的通知栏信息：头像作封面，标题为直播间标题，副标题为主播名
+  @override
+  ({String id, String title, String artist, String avatar})?
+      get audioNotificationInfo {
+    var info = detail.value;
+    if (info == null) {
+      return null;
+    }
+    return (
+      id: "${site.id}_${info.roomId}",
+      title: info.title.trim().isEmpty ? "直播音频" : info.title,
+      artist: info.userName.trim().isEmpty ? site.name : info.userName,
+      avatar: info.userAvatar,
+    );
+  }
+
+  /// 桌面端：最小化
+  @override
+  void onWindowMinimize() {
+    scheduleAutoAudioMode();
+  }
+
+  /// 桌面端：从小窗还原
+  @override
+  void onWindowRestore() {
+    cancelAutoAudioMode();
+  }
+
+  /// 桌面端：窗口失去焦点
+  @override
+  void onWindowBlur() {
+    scheduleAutoAudioMode();
+  }
+
+  /// 桌面端：窗口重新获得焦点
+  @override
+  void onWindowFocus() {
+    cancelAutoAudioMode();
   }
 
   // 用于启动开播时长计算和更新的函数
@@ -1054,6 +1129,12 @@ ${error?.stackTrace}''');
   @override
   void onClose() {
     WidgetsBinding.instance.removeObserver(this);
+    if (!Platform.isAndroid && !Platform.isIOS) {
+      windowManager.removeListener(this);
+    }
+    audioModeDelayTimer?.cancel();
+    // 离开直播间时清掉通知栏，避免残留一个无法关闭的音频通知
+    stopAudioNotification();
     scrollController.removeListener(scrollListener);
     autoExitTimer?.cancel();
 

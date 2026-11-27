@@ -30,6 +30,77 @@ void _exitPlayerWindowMode(LiveRoomController controller) {
   }
 }
 
+/// 音频模式下的黑屏占位
+///
+/// 音频模式会关闭视频解码（mpv `vid=no`），画面不再刷新，
+/// 用图标 + 房间信息提示当前是"只听声音"，避免误以为卡住。
+Widget buildAudioModeBackdrop(LiveRoomController controller) {
+  return Positioned.fill(
+    child: Obx(
+      () => controller.audioMode.value
+          ? Container(
+              color: Colors.black,
+              alignment: Alignment.center,
+              child: Padding(
+                padding: AppStyle.edgeInsetsA24,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(
+                      Remix.music_2_line,
+                      size: 56,
+                      color: Colors.white70,
+                    ),
+                    AppStyle.vGap12,
+                    const Text(
+                      "音频模式",
+                      style: TextStyle(color: Colors.white, fontSize: 16),
+                    ),
+                    AppStyle.vGap4,
+                    Text(
+                      "${controller.detail.value?.userName ?? ""}："
+                      "${controller.detail.value?.title ?? ""}",
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                        color: Colors.white54,
+                        fontSize: 12,
+                      ),
+                    ),
+                    AppStyle.vGap4,
+                    const Text(
+                      "已暂停画面解码，仅播放声音",
+                      style: TextStyle(color: Colors.white38, fontSize: 12),
+                    ),
+                  ],
+                ),
+              ),
+            )
+          : const SizedBox.shrink(),
+    ),
+  );
+}
+
+/// 音频模式开关按钮（仅移动端显示）
+Widget buildAudioModeButton(LiveRoomController controller) {
+  return Visibility(
+    visible: Platform.isAndroid || Platform.isIOS,
+    child: Obx(
+      () => IconButton(
+        tooltip: controller.audioMode.value ? "退出音频模式" : "音频模式",
+        onPressed: () {
+          controller.toggleAudioMode();
+        },
+        icon: Icon(
+          controller.audioMode.value ? Remix.music_2_fill : Remix.music_2_line,
+          color: Colors.white,
+        ),
+      ),
+    ),
+  );
+}
+
 Widget playerControls(
   VideoState videoState,
   LiveRoomController controller,
@@ -59,6 +130,7 @@ Widget buildFullControls(
     child: Stack(
       children: [
         Container(),
+        buildAudioModeBackdrop(controller),
         buildDanmuView(videoState, controller),
 
         // 左下角SC显示
@@ -353,6 +425,7 @@ Widget buildFullControls(
                       ),
                     ),
                   ),
+                  buildAudioModeButton(controller),
                   IconButton(
                     onPressed: () => _exitPlayerWindowMode(controller),
                     icon: const Icon(
@@ -449,6 +522,7 @@ Widget buildControls(
   return Stack(
     children: [
       Container(),
+      buildAudioModeBackdrop(controller),
       buildDanmuView(videoState, controller),
 
       // 左下角SC显示
@@ -643,6 +717,7 @@ Widget buildControls(
                     ),
                   ),
                 ),
+                buildAudioModeButton(controller),
                 IconButton(
                   onPressed: () {
                     controller.enterFullScreen();
@@ -698,7 +773,9 @@ Widget buildDanmuView(VideoState videoState, LiveRoomController controller) {
     bottom: padding.bottom,
     child: Obx(
       () => Offstage(
-        offstage: !controller.showDanmakuState.value,
+        // 音频模式下停止弹幕画布的重绘
+        offstage:
+            !controller.showDanmakuState.value || controller.audioMode.value,
         child: Padding(
           padding: controller.fullScreenState.value
               ? EdgeInsets.only(

@@ -58,6 +58,11 @@ kotlin {
     }
 }
 
+dependencies {
+    // 音频模式通知栏（NotificationCompat / ServiceCompat）
+    implementation("androidx.core:core-ktx:1.13.1")
+}
+
 flutter {
     source = "../.."
 }

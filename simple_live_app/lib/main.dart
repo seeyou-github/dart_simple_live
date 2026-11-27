@@ -25,6 +25,7 @@ import 'package:simple_live_app/modules/live_room/live_room_controller.dart';
 import 'package:simple_live_app/modules/other/debug_log_page.dart';
 import 'package:simple_live_app/routes/app_pages.dart';
 import 'package:simple_live_app/routes/route_path.dart';
+import 'package:simple_live_app/services/audio_mode/audio_notification.dart';
 import 'package:simple_live_app/services/bilibili_account_service.dart';
 import 'package:simple_live_app/services/douyin_account_service.dart';
 import 'package:simple_live_app/services/db_service.dart';
@@ -337,6 +338,8 @@ Future<void> _waitNextFrameRasterized() async {
 Future initServices() async {
   //播放器内核：只在真正需要播放前初始化即可，放到启动页期间完成
   MediaKit.ensureInitialized();
+  // 音频模式的后台通知：注册通知栏按钮回调（仅 Android）
+  AudioNotification.init();
 
   Hive.registerAdapter(FollowUserAdapter());
   Hive.registerAdapter(HistoryAdapter());
