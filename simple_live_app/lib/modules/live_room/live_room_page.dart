@@ -8,12 +8,10 @@ import 'package:lottie/lottie.dart';
 import 'package:media_kit_video/media_kit_video.dart';
 import 'package:remixicon/remixicon.dart';
 import 'package:simple_live_app/app/app_style.dart';
-import 'package:simple_live_app/app/constant.dart';
 import 'package:simple_live_app/app/controller/app_settings_controller.dart';
 import 'package:simple_live_app/app/utils.dart';
 import 'package:simple_live_app/modules/live_room/live_room_controller.dart';
 import 'package:simple_live_app/modules/live_room/player/player_controls.dart';
-import 'package:simple_live_app/widgets/keep_alive_wrapper.dart';
 import 'package:simple_live_app/widgets/net_image.dart';
 import 'package:simple_live_app/widgets/settings/settings_action.dart';
 import 'package:simple_live_app/widgets/settings/settings_card.dart';
@@ -306,28 +304,18 @@ class LiveRoomPage extends GetView<LiveRoomController> {
   Widget buildMessageArea() {
     return Expanded(
       child: DefaultTabController(
-        length: controller.site.id == Constant.kBiliBili ? 3 : 2,
+        length: 2,
         child: Column(
           children: [
             TabBar(
               indicatorSize: TabBarIndicatorSize.tab,
               labelPadding: EdgeInsets.zero,
               indicatorWeight: 1.0,
-              tabs: [
-                const Tab(
+              tabs: const [
+                Tab(
                   text: "聊天",
                 ),
-                if (controller.site.id == Constant.kBiliBili)
-                  Tab(
-                    child: Obx(
-                      () => Text(
-                        controller.superChats.isNotEmpty
-                            ? "SC(${controller.superChats.length})"
-                            : "SC",
-                      ),
-                    ),
-                  ),
-                const Tab(
+                Tab(
                   text: "设置",
                 ),
               ],
@@ -373,8 +361,6 @@ class LiveRoomPage extends GetView<LiveRoomController> {
                       ],
                     ),
                   ),
-                  if (controller.site.id == Constant.kBiliBili)
-                    buildSuperChats(),
                   buildSettings(),
                 ],
               ),
@@ -385,7 +371,13 @@ class LiveRoomPage extends GetView<LiveRoomController> {
     );
   }
 
-  Widget buildMessageItem(LiveMessage message) {
+  Widget buildMessageItem(ChatListItem item) {
+    // SC 醒目留言卡片，跟随聊天滚动
+    var superChat = item.superChat;
+    if (superChat != null) {
+      return SuperChatCard(superChat, onExpire: () {});
+    }
+    var message = item.message!;
     if (message.userName == "LiveSysMessage") {
       return Obx(
         () => Text(
@@ -458,27 +450,6 @@ class LiveRoomPage extends GetView<LiveRoomController> {
                 ],
               ),
             ),
-    );
-  }
-
-  Widget buildSuperChats() {
-    return KeepAliveWrapper(
-      child: Obx(
-        () => ListView.separated(
-          padding: AppStyle.edgeInsetsA12,
-          itemCount: controller.superChats.length,
-          separatorBuilder: (_, i) => AppStyle.vGap12,
-          itemBuilder: (_, i) {
-            var item = controller.superChats[i];
-            return SuperChatCard(
-              item,
-              onExpire: () {
-                controller.removeSuperChats();
-              },
-            );
-          },
-        ),
-      ),
     );
   }
 
@@ -558,17 +529,6 @@ class LiveRoomPage extends GetView<LiveRoomController> {
                   value: AppSettingsController.instance.chatBubbleStyle.value,
                   onChanged: (e) {
                     AppSettingsController.instance.setChatBubbleStyle(e);
-                  },
-                ),
-              ),
-              AppStyle.divider,
-              Obx(
-                () => SettingsSwitch(
-                  title: "播放器中显示SC",
-                  value:
-                      AppSettingsController.instance.playershowSuperChat.value,
-                  onChanged: (e) {
-                    AppSettingsController.instance.setPlayerShowSuperChat(e);
                   },
                 ),
               ),

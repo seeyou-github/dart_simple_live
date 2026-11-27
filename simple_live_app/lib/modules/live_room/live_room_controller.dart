@@ -33,6 +33,16 @@ import 'package:url_launcher/url_launcher_string.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 import 'package:window_manager/window_manager.dart';
 
+/// 聊天列表条目：普通聊天 / 系统消息，或 SC 醒目留言卡片
+class ChatListItem {
+  ChatListItem.chat(this.message) : superChat = null;
+
+  ChatListItem.superChat(this.superChat) : message = null;
+
+  final LiveMessage? message;
+  final LiveSuperChatMessage? superChat;
+}
+
 class LiveRoomController extends PlayerController
     with WidgetsBindingObserver, WindowListener {
   final Site pSite;
@@ -60,13 +70,12 @@ class LiveRoomController extends PlayerController
   var online = 0.obs;
   var followed = false.obs;
   var liveStatus = false.obs;
-  RxList<LiveSuperChatMessage> superChats = RxList<LiveSuperChatMessage>();
 
   /// 滚动控制
   final ScrollController scrollController = ScrollController();
 
-  /// 聊天信息
-  RxList<LiveMessage> messages = RxList<LiveMessage>();
+  /// 聊天信息（普通聊天 / 系统消息 / SC 醒目留言卡片）
+  RxList<ChatListItem> messages = RxList<ChatListItem>();
 
   /// 清晰度数据
   RxList<LivePlayQuality> qualites = RxList<LivePlayQuality>();
@@ -214,7 +223,6 @@ class LiveRoomController extends PlayerController
 
   void refreshRoom() {
     //messages.clear();
-    superChats.clear();
     liveDanmaku.stop();
 
     loadData();
@@ -276,7 +284,7 @@ class LiveRoomController extends PlayerController
       // 记录最近显示的弹幕内容，用于重复弹幕过滤
       _recordRecentDanmaku(msg.message);
 
-      messages.add(msg);
+      messages.add(ChatListItem.chat(msg));
 
       if (!isBackground && !audioMode.value) {
         WidgetsBinding.instance.addPostFrameCallback(
@@ -302,7 +310,8 @@ class LiveRoomController extends PlayerController
     } else if (msg.type == LiveMessageType.online) {
       online.value = msg.data;
     } else if (msg.type == LiveMessageType.superChat) {
-      superChats.add(msg.data);
+      // SC 醒目留言作为卡片插入聊天流，跟随聊天滚动
+      messages.add(ChatListItem.superChat(msg.data as LiveSuperChatMessage));
     }
   }
 
@@ -363,11 +372,13 @@ class LiveRoomController extends PlayerController
   /// 添加一条系统消息
   void addSysMsg(String msg) {
     messages.add(
-      LiveMessage(
-        type: LiveMessageType.chat,
-        userName: "LiveSysMessage",
-        message: msg,
-        color: LiveMessageColor.white,
+      ChatListItem.chat(
+        LiveMessage(
+          type: LiveMessageType.chat,
+          userName: "LiveSysMessage",
+          message: msg,
+          color: LiveMessageColor.white,
+        ),
       ),
     );
   }
@@ -628,24 +639,16 @@ class LiveRoomController extends PlayerController
     }
   }
 
-  /// 读取SC
+  /// 读取SC，作为卡片插入聊天流
   void getSuperChatMessage() async {
     try {
       var sc =
           await site.liveSite.getSuperChatMessage(roomId: detail.value!.roomId);
-      superChats.addAll(sc);
+      messages.addAll(sc.map((e) => ChatListItem.superChat(e)));
     } catch (e) {
       Log.logPrint(e);
       addSysMsg("SC读取失败");
     }
-  }
-
-  /// 移除掉已到期的SC
-  void removeSuperChats() async {
-    var now = DateTime.now().millisecondsSinceEpoch;
-    superChats.value = superChats
-        .where((x) => x.endTime.millisecondsSinceEpoch > now)
-        .toList();
   }
 
   /// 添加历史记录
@@ -1165,7 +1168,6 @@ class LiveRoomController extends PlayerController
     // 清除全部消息
     liveDanmaku.stop();
     messages.clear();
-    superChats.clear();
     danmakuController?.clear();
     // 换房间后重复弹幕对比不跨房间
     _recentDanmakuTexts.clear();
