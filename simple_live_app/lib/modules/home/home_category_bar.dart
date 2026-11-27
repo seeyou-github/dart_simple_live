@@ -449,8 +449,35 @@ class _CategoryPickerSheetState extends State<_CategoryPickerSheet> {
         );
       }
     });
+    await _persistPinned();
+  }
+
+  /// 保存固定分类并通知主页分类栏刷新
+  Future<void> _persistPinned() async {
     await PinnedCategoryStore.save(widget.site.id, _pinned);
     widget.onPinnedChanged(_pinned);
+  }
+
+  /// 已固定分类行内左右拖动排序
+  void _onPinnedReorder(int oldIndex, int newIndex) {
+    setState(() {
+      if (newIndex > oldIndex) {
+        newIndex -= 1;
+      }
+      var item = _pinned.removeAt(oldIndex);
+      _pinned.insert(newIndex, item);
+    });
+    _persistPinned();
+  }
+
+  /// 删除已固定的分类
+  Future<void> _removePinned(PinnedCategory item) async {
+    setState(() {
+      _pinned.removeWhere(
+        (e) => e.categoryId == item.categoryId && e.parentId == item.parentId,
+      );
+    });
+    await _persistPinned();
   }
 
   @override
@@ -485,6 +512,7 @@ class _CategoryPickerSheetState extends State<_CategoryPickerSheet> {
           ),
         ),
         const Divider(height: 1),
+        _buildPinnedRow(context),
         Expanded(
           child: FutureBuilder<List<LiveCategory>>(
             future: _future,
@@ -516,6 +544,89 @@ class _CategoryPickerSheetState extends State<_CategoryPickerSheet> {
           ),
         ),
       ],
+    );
+  }
+
+  /// 已固定分类行：第一行显示已固定的分类名称（无图标），
+  /// 左右拖动排序，名称右侧红底白×按钮删除
+  Widget _buildPinnedRow(BuildContext context) {
+    if (_pinned.isEmpty) {
+      return const SizedBox.shrink();
+    }
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 10, 16, 2),
+      child: SizedBox(
+        height: 36,
+        child: ReorderableListView.builder(
+          scrollDirection: Axis.horizontal,
+          padding: EdgeInsets.zero,
+          itemCount: _pinned.length,
+          onReorder: _onPinnedReorder,
+          proxyDecorator: (child, index, animation) {
+            return AnimatedBuilder(
+              animation: animation,
+              builder: (_, child) => Material(
+                elevation: 2,
+                color: Colors.transparent,
+                borderRadius: BorderRadius.circular(16),
+                child: child,
+              ),
+              child: child,
+            );
+          },
+          itemBuilder: (context, index) {
+            var item = _pinned[index];
+            return Padding(
+              key: ValueKey("${item.parentId}_${item.categoryId}"),
+              padding: const EdgeInsets.only(right: 8),
+              child: _buildPinnedChip(context, item),
+            );
+          },
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPinnedChip(BuildContext context, PinnedCategory item) {
+    var colorScheme = Theme.of(context).colorScheme;
+    return Container(
+      height: 32,
+      padding: const EdgeInsets.only(left: 12, right: 3),
+      decoration: BoxDecoration(
+        color: colorScheme.primary.withAlpha(20),
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            item.name,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(fontSize: 13, color: colorScheme.onSurface),
+          ),
+          const SizedBox(width: 2),
+          GestureDetector(
+            onTap: () => _removePinned(item),
+            child: Padding(
+              padding: const EdgeInsets.all(5),
+              child: Container(
+                width: 16,
+                height: 16,
+                decoration: BoxDecoration(
+                  color: colorScheme.error,
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.close_rounded,
+                  size: 11,
+                  color: Colors.white,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 
