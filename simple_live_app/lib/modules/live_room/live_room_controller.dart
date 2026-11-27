@@ -277,14 +277,33 @@ class LiveRoomController extends PlayerController
         }
       }
 
-      // 过滤规则：重复弹幕 / 纯表情弹幕 / 纯数字弹幕
-      if (_isFilteredByRules(msg.message)) {
+      // 过滤表情：删除文字中的表情与 [微笑] 类表情标签，仅保留文字
+      var displayMsg = msg;
+      if (AppSettingsController.instance.danmuStripEmoji.value) {
+        var text = _stripEmojiText(msg.message);
+        if (text.isEmpty) {
+          // 整条都是表情，删完后没有文字可显示
+          return;
+        }
+        if (text != msg.message) {
+          displayMsg = LiveMessage(
+            type: msg.type,
+            userName: msg.userName,
+            message: text,
+            data: msg.data,
+            color: msg.color,
+          );
+        }
+      }
+
+      // 过滤规则：重复弹幕 / 纯表情弹幕 / 纯数字弹幕（基于显示文本）
+      if (_isFilteredByRules(displayMsg.message)) {
         return;
       }
       // 记录最近显示的弹幕内容，用于重复弹幕过滤
-      _recordRecentDanmaku(msg.message);
+      _recordRecentDanmaku(displayMsg.message);
 
-      messages.add(ChatListItem.chat(msg));
+      messages.add(ChatListItem.chat(displayMsg));
 
       if (!isBackground && !audioMode.value) {
         WidgetsBinding.instance.addPostFrameCallback(
@@ -298,12 +317,12 @@ class LiveRoomController extends PlayerController
 
       addDanmaku([
         DanmakuContentItem(
-          msg.message,
+          displayMsg.message,
           color: Color.fromARGB(
             255,
-            msg.color.r,
-            msg.color.g,
-            msg.color.b,
+            displayMsg.color.r,
+            displayMsg.color.g,
+            displayMsg.color.b,
           ),
         ),
       ]);
@@ -354,6 +373,21 @@ class LiveRoomController extends PlayerController
     });
     remainder = remainder.replaceAll(_emojiCharRegExp, "");
     return hasEmoji && remainder.trim().isEmpty;
+  }
+
+  /// 删除文字中的表情：Unicode 表情字符与 [xx] 表情标签全部移除，
+  /// 仅保留文字（纯数字标签如 [666] 不按表情处理）
+  String _stripEmojiText(String text) {
+    var remainder = text.replaceAllMapped(_emoteTagRegExp, (match) {
+      var inner = match.group(0)!;
+      inner = inner.substring(1, inner.length - 1).trim();
+      if (inner.isEmpty || int.tryParse(inner) != null) {
+        return inner;
+      }
+      return "";
+    });
+    remainder = remainder.replaceAll(_emojiCharRegExp, "");
+    return remainder.trim();
   }
 
   /// 是否为纯数字弹幕：仅由数字与空白构成（至少含一个数字）
@@ -1003,6 +1037,19 @@ class LiveRoomController extends PlayerController
                         AppSettingsController.instance.danmuFilterNumber.value,
                     onChanged: (e) {
                       AppSettingsController.instance.setDanmuFilterNumber(e);
+                    },
+                  ),
+                ),
+                AppStyle.divider,
+                Obx(
+                  () => SettingsSwitch(
+                    title: "过滤表情",
+                    subtitle:
+                        "删除弹幕与聊天文字中的表情（含 [微笑] 标签），仅显示文字",
+                    value:
+                        AppSettingsController.instance.danmuStripEmoji.value,
+                    onChanged: (e) {
+                      AppSettingsController.instance.setDanmuStripEmoji(e);
                     },
                   ),
                 ),

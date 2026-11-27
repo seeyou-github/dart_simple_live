@@ -41,6 +41,8 @@ class AppSettingsController extends GetxController {
         .getValue(LocalStorageService.kDanmuFilterEmoji, true);
     danmuFilterNumber.value = LocalStorageService.instance
         .getValue(LocalStorageService.kDanmuFilterNumber, true);
+    danmuStripEmoji.value = LocalStorageService.instance
+        .getValue(LocalStorageService.kDanmuStripEmoji, true);
     danmuStrokeWidth.value = LocalStorageService.instance
         .getValue(LocalStorageService.kDanmuStrokeWidth, 2.0);
     danmuTopMargin.value = LocalStorageService.instance
@@ -327,6 +329,14 @@ class AppSettingsController extends GetxController {
     danmuFilterNumber.value = e;
     LocalStorageService.instance
         .setValue(LocalStorageService.kDanmuFilterNumber, e);
+  }
+
+  /// 过滤表情（删除文字中的表情与表情标签，仅显示文字）
+  var danmuStripEmoji = true.obs;
+  void setDanmuStripEmoji(bool e) {
+    danmuStripEmoji.value = e;
+    LocalStorageService.instance
+        .setValue(LocalStorageService.kDanmuStripEmoji, e);
   }
 
   var danmuStrokeWidth = 2.0.obs;

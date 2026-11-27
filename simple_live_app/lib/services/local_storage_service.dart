@@ -69,6 +69,9 @@ class LocalStorageService extends GetxService {
   /// 过滤纯数字弹幕
   static const String kDanmuFilterNumber = "DanmuFilterNumber";
 
+  /// 过滤表情（删除文字中的表情，仅显示文字）
+  static const String kDanmuStripEmoji = "DanmuStripEmoji";
+
   /// 弹幕字重
   static const String kDanmuFontWeight = "DanmuFontWeight";
 
