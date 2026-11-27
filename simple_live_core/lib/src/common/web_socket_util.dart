@@ -58,10 +58,18 @@ class WebScoketUtils {
   /// 最大重连次数
   int maxReconnectTime = 5;
 
+  /// 是否被外部主动停止（如音频模式 / 后台挂起弹幕连接）
+  ///
+  /// connect() 期间被停止时，不再进入就绪状态、不再自动重试，
+  /// 否则 close() 会让 `await ready` 抛错走重试分支，连接停不掉
+  bool stopped = false;
+
   StreamSubscription<dynamic>? streamSubscription;
 
   void connect({bool retry = false}) async {
+    // close() 会标记 stopped（视为外部停止），这里重新连接要清除该标记
     close();
+    stopped = false;
     try {
       var wsurl = url;
       if (backupUrl != null && backupUrl!.isNotEmpty && retry) {
@@ -74,8 +82,17 @@ class WebScoketUtils {
       );
 
       await webSocket?.ready;
+      // 连接期间被停止：直接关闭，不进入就绪状态
+      if (stopped) {
+        webSocket?.sink.close();
+        return;
+      }
       ready();
     } catch (e) {
+      // 连接期间被停止时不重试，避免停止后又被重新连上
+      if (stopped) {
+        return;
+      }
       if (!retry) {
         connect(retry: true);
         return;
@@ -133,6 +150,7 @@ class WebScoketUtils {
   }
 
   void close() {
+    stopped = true;
     status = SocketStatus.closed;
 
     streamSubscription?.cancel();

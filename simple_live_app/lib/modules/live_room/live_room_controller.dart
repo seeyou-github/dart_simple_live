@@ -102,6 +102,9 @@ class LiveRoomController extends PlayerController
   /// 是否处于后台
   var isBackground = false;
 
+  /// 直播间活动是否已挂起（音频模式 / 后台：弹幕连接断开、计时暂停）
+  bool _roomActivitySuspended = false;
+
   /// 直播间加载失败
   var loadError = false.obs;
   Error? error;
@@ -217,6 +220,10 @@ class LiveRoomController extends PlayerController
 
   /// 接收到WebSocket信息
   void onWSMessage(LiveMessage msg) {
+    // 音频模式 / 后台时弹幕连接已停止，这里兜底忽略残留消息，避免更新 UI
+    if (audioMode.value || isBackground) {
+      return;
+    }
     if (msg.type == LiveMessageType.chat) {
       if (messages.length > 200 && !disableAutoScroll.value) {
         messages.removeAt(0);
@@ -294,6 +301,26 @@ class LiveRoomController extends PlayerController
     addSysMsg("弹幕服务器连接正常");
   }
 
+  /// 按前后台 / 音频模式状态挂起或恢复直播间活动
+  ///
+  /// 音频模式或后台时：断开弹幕连接（聊天 / 弹幕 / 人气值全部停止加载）、
+  /// 暂停开播时长计时，仅保留播放器的音频输出，把 CPU / GPU 占用降到最低；
+  /// 回到前台后重新连接弹幕服务器、恢复计时。
+  void applyRoomActivityState() {
+    if (audioMode.value || isBackground) {
+      liveDanmaku.stop();
+      _liveDurationTimer?.cancel();
+      _roomActivitySuspended = true;
+    } else if (_roomActivitySuspended) {
+      _roomActivitySuspended = false;
+      if (detail.value != null) {
+        initDanmau();
+        liveDanmaku.start(detail.value?.danmakuData);
+      }
+      startLiveDurationTimer();
+    }
+  }
+
   /// 加载直播间信息
   void loadData() async {
     try {
@@ -348,6 +375,8 @@ class LiveRoomController extends PlayerController
       initDanmau();
       liveDanmaku.start(detail.value?.danmakuData);
       startLiveDurationTimer(); // 启动开播时长定时器
+      // 若此时已处于音频模式 / 后台（如后台切换直播间），立即挂起
+      applyRoomActivityState();
     } catch (e) {
       Log.logPrint(e);
       //SmartDialog.showToast(e.toString());
@@ -1053,20 +1082,24 @@ ${error?.stackTrace}''');
           enterAudioMode();
         }
       } else {
-        // 桌面端等窗口状态一起判断（最小化 / 失焦 5 秒后进入）
+        // 桌面端：最小化 / 失焦立即进入音频模式
         scheduleAutoAudioMode();
       }
+      // 挂起弹幕连接与开播时长计时（含「后台暂停」不进音频模式的情况）
+      applyRoomActivityState();
     } else
     //返回前台
     if (state == AppLifecycleState.resumed) {
       Log.d("返回前台");
-      isBackground = false;
       if (Platform.isAndroid || Platform.isIOS) {
+        isBackground = false;
         if (audioMode.value && !audioModeManual) {
           exitAudioMode();
         }
+        applyRoomActivityState();
       } else {
-        cancelAutoAudioMode();
+        // 桌面端：核对窗口真实状态后再恢复（最小化 / 失焦可能伴随误事件）
+        _confirmWindowForeground();
       }
     }
   }
@@ -1087,32 +1120,74 @@ ${error?.stackTrace}''');
     );
   }
 
+  /// 进入音频模式时同步挂起直播间活动（弹幕 / 聊天 / 计时）
+  @override
+  Future<void> enterAudioMode({bool manual = false}) async {
+    await super.enterAudioMode(manual: manual);
+    applyRoomActivityState();
+  }
+
+  /// 退出音频模式时同步恢复直播间活动
+  @override
+  Future<void> exitAudioMode({bool manual = false}) async {
+    await super.exitAudioMode(manual: manual);
+    applyRoomActivityState();
+  }
+
+  /// 桌面端：窗口焦点 / 还原变化后核对真实状态并同步前后台
+  ///
+  /// 最小化 / 失焦时系统可能紧接着派发 focus / restore 事件，
+  /// 不能直接按事件恢复前台，否则刚进入的音频模式会被误撤销；
+  /// 核对窗口确实回到前台后，才恢复直播间活动并退出自动音频模式。
+  Future<void> _confirmWindowForeground() async {
+    try {
+      var minimized = await windowManager.isMinimized();
+      var focused = await windowManager.isFocused();
+      if (minimized || !focused) {
+        // 仍在后台：确保音频模式与直播间挂起状态有效
+        isBackground = true;
+        if (!audioModeManual && !audioMode.value) {
+          scheduleAutoAudioMode();
+        }
+        applyRoomActivityState();
+        return;
+      }
+      isBackground = false;
+      if (audioMode.value && !audioModeManual) {
+        await exitAudioMode();
+      }
+      applyRoomActivityState();
+    } catch (e) {
+      Log.logPrint(e);
+    }
+  }
+
   /// 桌面端：最小化
   @override
   void onWindowMinimize() {
     isBackground = true;
+    applyRoomActivityState();
     scheduleAutoAudioMode();
   }
 
   /// 桌面端：从最小化还原
   @override
   void onWindowRestore() {
-    isBackground = false;
-    cancelAutoAudioMode();
+    _confirmWindowForeground();
   }
 
   /// 桌面端：窗口失去焦点
   @override
   void onWindowBlur() {
     isBackground = true;
+    applyRoomActivityState();
     scheduleAutoAudioMode();
   }
 
   /// 桌面端：窗口重新获得焦点
   @override
   void onWindowFocus() {
-    isBackground = false;
-    cancelAutoAudioMode();
+    _confirmWindowForeground();
   }
 
   // 用于启动开播时长计算和更新的函数
@@ -1152,7 +1227,6 @@ ${error?.stackTrace}''');
     if (!Platform.isAndroid && !Platform.isIOS) {
       windowManager.removeListener(this);
     }
-    audioModeDelayTimer?.cancel();
     // 离开直播间时清掉通知栏，避免残留一个无法关闭的音频通知
     stopAudioNotification();
     scrollController.removeListener(scrollListener);

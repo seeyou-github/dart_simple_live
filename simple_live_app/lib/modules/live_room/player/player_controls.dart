@@ -768,19 +768,24 @@ Widget buildDanmuView(VideoState videoState, LiveRoomController controller) {
     top: padding.top,
     bottom: padding.bottom,
     child: Obx(
-      () => Offstage(
-        // 音频模式下停止弹幕画布的重绘
-        offstage:
-            !controller.showDanmakuState.value || controller.audioMode.value,
-        child: Padding(
-          padding: controller.fullScreenState.value
-              ? EdgeInsets.only(
-                  top: AppSettingsController.instance.danmuTopMargin.value,
-                  bottom:
-                      AppSettingsController.instance.danmuBottomMargin.value,
-                )
-              : EdgeInsets.zero,
-          child: controller.danmakuView!,
+      () => TickerMode(
+        // 音频模式 / 弹幕关闭时停掉画布动画时钟，避免每帧空转消耗 CPU / GPU
+        enabled:
+            controller.showDanmakuState.value && !controller.audioMode.value,
+        child: Offstage(
+          // 音频模式下停止弹幕画布的重绘
+          offstage:
+              !controller.showDanmakuState.value || controller.audioMode.value,
+          child: Padding(
+            padding: controller.fullScreenState.value
+                ? EdgeInsets.only(
+                    top: AppSettingsController.instance.danmuTopMargin.value,
+                    bottom:
+                        AppSettingsController.instance.danmuBottomMargin.value,
+                  )
+                : EdgeInsets.zero,
+            child: controller.danmakuView!,
+          ),
         ),
       ),
     ),
