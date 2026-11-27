@@ -548,7 +548,7 @@ class _CategoryPickerSheetState extends State<_CategoryPickerSheet> {
   }
 
   /// 已固定分类行：第一行显示已固定的分类名称（无图标），
-  /// 左右拖动排序，名称右侧红底白×按钮删除
+  /// 名称左侧为红底白×删除按钮，左右拖动胶囊排序
   Widget _buildPinnedRow(BuildContext context) {
     if (_pinned.isEmpty) {
       return const SizedBox.shrink();
@@ -591,7 +591,7 @@ class _CategoryPickerSheetState extends State<_CategoryPickerSheet> {
     var colorScheme = Theme.of(context).colorScheme;
     return Container(
       height: 32,
-      padding: const EdgeInsets.only(left: 12, right: 3),
+      padding: const EdgeInsets.only(left: 3, right: 12),
       decoration: BoxDecoration(
         // 不透明实色：拖动时浮起的胶囊不会与下方文字透出重叠
         color: Color.alphaBlend(
@@ -603,13 +603,7 @@ class _CategoryPickerSheetState extends State<_CategoryPickerSheet> {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Text(
-            item.name,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(fontSize: 13, color: colorScheme.onSurface),
-          ),
-          const SizedBox(width: 2),
+          // 删除按钮固定在文字左侧，永不与名称重叠
           GestureDetector(
             onTap: () => _removePinned(item),
             child: Padding(
@@ -627,6 +621,16 @@ class _CategoryPickerSheetState extends State<_CategoryPickerSheet> {
                   color: Colors.white,
                 ),
               ),
+            ),
+          ),
+          const SizedBox(width: 2),
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 120),
+            child: Text(
+              item.name,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(fontSize: 13, color: colorScheme.onSurface),
             ),
           ),
         ],
