@@ -117,6 +117,13 @@ class LiveRoomController extends PlayerController
   /// 直播间活动是否已挂起（音频模式 / 后台：弹幕连接断开、计时暂停）
   bool _roomActivitySuspended = false;
 
+  /// 桌面端后台窗口状态监控定时器：每秒核对窗口真实状态，
+  /// 保证后台处于音频模式、回前台立即退出（防误派发事件撤销状态后无法恢复）
+  Timer? _autoAudioModeMonitor;
+
+  /// 用户在后台手动退出音频模式后暂不自动重新进入，回前台后解除
+  bool _suppressAutoAudioMode = false;
+
   /// 最近显示过的弹幕内容（用于过滤重复弹幕，最多保留 100 条）
   final Queue<String> _recentDanmakuTexts = Queue<String>();
 
@@ -1309,7 +1316,78 @@ ${error?.stackTrace}''');
   @override
   Future<void> exitAudioMode({bool manual = false}) async {
     await super.exitAudioMode(manual: manual);
+    if (manual) {
+      // 用户在后台手动退出音频模式，监控不再自动重新进入，回前台后解除
+      _suppressAutoAudioMode = true;
+    }
     applyRoomActivityState();
+  }
+
+  /// 桌面端：最小化 / 失焦后立即进入音频模式，并启动后台监控自愈
+  ///
+  /// 最小化 / 失焦时系统可能紧接着派发误的 focus / restore 事件，
+  /// 单次进入可能被核对逻辑误撤销且没有后续事件补救，
+  /// 因此除立即进入外，再由每秒一次的后台监控兜底：
+  /// 后台保持音频模式（自愈重新进入），回前台立即退出。
+  void scheduleAutoAudioMode() {
+    if (Platform.isAndroid || Platform.isIOS) {
+      return;
+    }
+    // 「进入后台自动暂停」开启时不进入音频模式，也无需后台监控
+    if (AppSettingsController.instance.playerAutoPause.value) {
+      return;
+    }
+    // 小窗常驻桌面播放，失焦后仍需显示画面
+    if (smallWindowState.value) {
+      return;
+    }
+    // 新的后台事件解除「后台手动退出」的抑制
+    _suppressAutoAudioMode = false;
+    _startAutoAudioModeMonitor();
+    if (audioMode.value || audioModeManual) {
+      return;
+    }
+    Log.d("桌面端最小化/失焦，立即进入音频模式");
+    enterAudioMode();
+  }
+
+  void _startAutoAudioModeMonitor() {
+    _autoAudioModeMonitor ??= Timer.periodic(const Duration(seconds: 1), (_) {
+      _verifyAutoAudioMode();
+    });
+  }
+
+  void _stopAutoAudioModeMonitor() {
+    _autoAudioModeMonitor?.cancel();
+    _autoAudioModeMonitor = null;
+  }
+
+  /// 每秒核对窗口真实状态：后台自愈保持音频模式，回前台立即退出
+  Future<void> _verifyAutoAudioMode() async {
+    try {
+      var minimized = await windowManager.isMinimized();
+      var focused = await windowManager.isFocused();
+      if (!minimized && focused) {
+        // 窗口已回到前台：停止监控并退出自动音频模式
+        _stopAutoAudioModeMonitor();
+        _suppressAutoAudioMode = false;
+        isBackground = false;
+        if (audioMode.value && !audioModeManual) {
+          await exitAudioMode();
+        }
+        applyRoomActivityState();
+        return;
+      }
+      // 仍在后台：自愈，确保音频模式与直播间挂起状态有效
+      isBackground = true;
+      if (!_suppressAutoAudioMode && !audioModeManual && !audioMode.value) {
+        Log.d("桌面端后台监控：重新进入音频模式");
+        await enterAudioMode();
+      }
+      applyRoomActivityState();
+    } catch (e) {
+      Log.logPrint(e);
+    }
   }
 
   /// 桌面端：窗口焦点 / 还原变化后核对真实状态并同步前后台
@@ -1322,14 +1400,15 @@ ${error?.stackTrace}''');
       var minimized = await windowManager.isMinimized();
       var focused = await windowManager.isFocused();
       if (minimized || !focused) {
-        // 仍在后台：确保音频模式与直播间挂起状态有效
+        // 仍在后台：交给后台监控保持音频模式（不解除手动退出的抑制）
         isBackground = true;
-        if (!audioModeManual && !audioMode.value) {
-          scheduleAutoAudioMode();
-        }
+        _startAutoAudioModeMonitor();
         applyRoomActivityState();
         return;
       }
+      // 真正回到前台：停止监控并退出自动音频模式
+      _stopAutoAudioModeMonitor();
+      _suppressAutoAudioMode = false;
       isBackground = false;
       if (audioMode.value && !audioModeManual) {
         await exitAudioMode();
@@ -1405,6 +1484,7 @@ ${error?.stackTrace}''');
     if (!Platform.isAndroid && !Platform.isIOS) {
       windowManager.removeListener(this);
     }
+    _stopAutoAudioModeMonitor();
     // 离开直播间时清掉通知栏，避免残留一个无法关闭的音频通知
     stopAudioNotification();
     scrollController.removeListener(scrollListener);

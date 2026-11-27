@@ -338,8 +338,12 @@ mixin PlayerSystemMixin on PlayerMixin, PlayerStateMixin, PlayerDanmakuMixin {
     }
     audioMode.value = true;
     danmakuController?.clear();
-    // 只听声音，屏幕不需要常亮
-    await WakelockPlus.disable();
+    // 只听声音，屏幕不需要常亮（失败不影响音频模式生效）
+    try {
+      await WakelockPlus.disable();
+    } catch (e) {
+      Log.logPrint(e);
+    }
     await setVideoTrackEnabled(false);
     await startAudioNotification();
   }
@@ -385,29 +389,9 @@ mixin PlayerSystemMixin on PlayerMixin, PlayerStateMixin, PlayerDanmakuMixin {
     }
   }
 
-  /// 桌面端：窗口最小化或失去焦点后立即进入音频模式
-  ///
-  /// 立即进入而不是延迟等待：最小化 / 失焦时系统可能紧接着派发
-  /// focus / restore 事件，因此是否退出由「核对窗口真实状态」的
-  /// 前台确认逻辑（LiveRoomController）决定，不会被误事件撤销。
-  void scheduleAutoAudioMode() {
-    if (Platform.isAndroid || Platform.isIOS) {
-      return;
-    }
-    // 用户开启了「后台暂停」时保持暂停，不再自动切音频模式
-    if (AppSettingsController.instance.playerAutoPause.value) {
-      return;
-    }
-    // 小窗常驻桌面播放，失焦后仍需显示画面
-    if (smallWindowState.value) {
-      return;
-    }
-    if (audioMode.value || audioModeManual) {
-      return;
-    }
-    Log.d("桌面端最小化/失焦，立即进入音频模式");
-    enterAudioMode();
-  }
+  /// 桌面端：窗口最小化或失去焦点后的音频模式调度
+  /// 已移至 LiveRoomController.scheduleAutoAudioMode()：
+  /// 立即进入 + 每秒后台监控自愈（误派发事件可能撤销单次进入，需兜底）。
 
   /// 开启后台音频通知（仅 Android）
   Future<void> startAudioNotification() async {
