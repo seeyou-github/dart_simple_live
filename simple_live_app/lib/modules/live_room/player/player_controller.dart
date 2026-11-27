@@ -324,7 +324,14 @@ mixin PlayerSystemMixin on PlayerMixin, PlayerStateMixin, PlayerDanmakuMixin {
   /// 进入音频模式：关闭视频解码、停止弹幕刷新，移动端显示常驻通知
   ///
   /// [manual] 为用户手动开启：回到前台 / 窗口重新获得焦点时不会自动退出。
+  ///
+  /// 「设置 - 直播间设置 - 进入后台自动暂停」开启时，最小化 / 失焦
+  /// 一律不自动进入音频模式（保持暂停），仅手动开关不受此限制。
   Future<void> enterAudioMode({bool manual = false}) async {
+    // 自动进入路径统一拦截：后台自动暂停开启时不进入音频模式
+    if (!manual && AppSettingsController.instance.playerAutoPause.value) {
+      return;
+    }
     audioModeManual = audioModeManual || manual;
     if (audioMode.value) {
       return;
