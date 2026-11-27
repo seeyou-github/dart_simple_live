@@ -593,7 +593,11 @@ class _CategoryPickerSheetState extends State<_CategoryPickerSheet> {
       height: 32,
       padding: const EdgeInsets.only(left: 12, right: 3),
       decoration: BoxDecoration(
-        color: colorScheme.primary.withAlpha(20),
+        // 不透明实色：拖动时浮起的胶囊不会与下方文字透出重叠
+        color: Color.alphaBlend(
+          colorScheme.primary.withAlpha(38),
+          colorScheme.surface,
+        ),
         borderRadius: BorderRadius.circular(16),
       ),
       child: Row(
