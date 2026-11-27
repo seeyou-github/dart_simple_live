@@ -95,8 +95,9 @@ String _causeOf(dio.DioException error) {
 
 /// WebDAV 备份客户端
 ///
-/// 备份统一保存在 `<配置地址>/simple_live_app/` 下（与旧版本同目录，
-/// 升级后原有的 backup.zip 仍能看到）。
+/// 备份统一保存在 `<配置地址>/simple_live_app/` 下。备份文件按平台区分：
+/// 手机、桌面各自的设置项不同，文件名带 `<平台>_` 前缀，恢复时只列出当前平台，
+/// 避免把 Windows 的备份恢复到 Android 上。跨设备同步文件全平台共用一份。
 class BackupClient {
   BackupClient._();
 
@@ -105,32 +106,46 @@ class BackupClient {
   /// 远端备份目录（相对配置地址）
   static const folderPath = "/simple_live_app";
 
-  /// 跨设备同步数据文件名（全平台共用一份）
+  /// 跨设备同步数据文件名（全平台共用一份，不能加平台前缀，
+  /// 否则新设备接入时会读不到已有同步数据而把云端覆盖成空）
   static const syncFileName = "Sync_SimpleLive.json";
 
-  /// 当前平台的备份文件名前缀，用于隔离各平台的自动备份
-  static String get platformPrefix {
+  /// 手动备份文件名前缀
+  static const backupNamePrefix = "SimpleLive_backup_";
+
+  /// 自动备份文件名前缀（同平台固定名称，每次覆盖）
+  static const autoBackupNamePrefix = "SimpleLive_AutoBackup";
+
+  /// 当前平台标识（用于文件名前缀与界面提示）
+  static String get platformLabel {
     if (Platform.isWindows) {
-      return "Windows_";
+      return "Windows";
     }
     if (Platform.isAndroid) {
-      return "Android_";
+      return "Android";
     }
     if (Platform.isIOS) {
-      return "iOS_";
+      return "iOS";
     }
     if (Platform.isMacOS) {
-      return "macOS_";
+      return "macOS";
     }
     if (Platform.isLinux) {
-      return "Linux_";
+      return "Linux";
     }
-    return "";
+    return "Other";
   }
+
+  /// 当前平台的备份文件名前缀，用于隔离各平台的备份
+  static String get platformPrefix => "${platformLabel}_";
 
   /// 自动备份的固定文件名（同平台每次覆盖）
   static String get autoBackupFileName =>
-      "SimpleLive_AutoBackup_${platformPrefix.isEmpty ? "Other" : platformPrefix.substring(0, platformPrefix.length - 1)}.zip";
+      "$platformPrefix$autoBackupNamePrefix.zip";
+
+  /// 旧版自动备份文件名（平台名在后），仅用于兼容旧文件与上传后清理
+  static String get legacyAutoBackupFileName =>
+      "${autoBackupNamePrefix}_$platformLabel.zip";
 
   static String _filePath(String name) => "$folderPath/$name";
 
@@ -165,7 +180,9 @@ class BackupClient {
   }
 
   /// 保存配置：只在内容变化时写入，避免每次保存都触发自动备份
-  Future<void> saveConfig({
+  ///
+  /// 返回是否发生了变化（用于配置好之后立即安排一次同步）。
+  Future<bool> saveConfig({
     required String uri,
     required String user,
     required String password,
@@ -173,17 +190,22 @@ class BackupClient {
     var normalizedUri = uri.trim();
     var normalizedUser = user.trim();
     var storage = LocalStorageService.instance;
+    var changed = false;
     if (_uri != normalizedUri) {
       await storage.setValue(LocalStorageService.kWebDAVUri, normalizedUri);
+      changed = true;
     }
     if (_user != normalizedUser) {
       await storage.setValue(LocalStorageService.kWebDAVUser, normalizedUser);
+      changed = true;
     }
     if (_password != password) {
       await storage.setValue(LocalStorageService.kWebDAVPassword, password);
+      changed = true;
     }
     _clientConfig = null;
     _client = null;
+    return changed;
   }
 
   Future<webdav.Client> _connect({bool force = false}) async {
@@ -266,9 +288,8 @@ class BackupClient {
       if (!name.toLowerCase().endsWith(".zip")) {
         continue;
       }
-      // 旧版本的 backup.zip 结构不同，无法恢复，不在列表里显示
-      if (!name.startsWith("SimpleLive_backup_") &&
-          !name.startsWith("SimpleLive_AutoBackup_")) {
+      // 只显示当前平台的备份；旧版 backup.zip 结构不同，无法恢复，不显示
+      if (!_isCurrentPlatformFile(name)) {
         continue;
       }
       list.add(
@@ -284,6 +305,31 @@ class BackupClient {
           (b.modified ?? DateTime(0)).compareTo(a.modified ?? DateTime(0)),
     );
     return list;
+  }
+
+  /// 判断备份文件是否属于当前平台
+  ///
+  /// 新命名为 `<平台>_SimpleLive_backup_*.zip` / `<平台>_SimpleLive_AutoBackup.zip`；
+  /// 旧版自动备份是 `SimpleLive_AutoBackup_<平台>.zip`，一并兼容（同平台才算）。
+  static bool _isCurrentPlatformFile(String name) {
+    if (name == legacyAutoBackupFileName) {
+      return true;
+    }
+    if (!name.startsWith(platformPrefix)) {
+      return false;
+    }
+    return name.startsWith("$platformPrefix$backupNamePrefix") ||
+        name.startsWith("$platformPrefix$autoBackupNamePrefix");
+  }
+
+  /// 上传新版自动备份后清理旧版文件，避免恢复列表出现两个同平台自动备份
+  Future<void> removeLegacyAutoBackup() async {
+    try {
+      var client = await _connect();
+      await client.remove(_filePath(legacyAutoBackupFileName));
+    } catch (e) {
+      // 不存在或服务器不支持删除都忽略，不影响备份结果
+    }
   }
 
   /// 直接 GET 下载，绕过部分服务器对 OPTIONS 预检的 301
@@ -334,11 +380,11 @@ class BackupClient {
     await client.remove(_filePath(name));
   }
 
-  /// 手动备份文件名：`SimpleLive_backup_2026.11.27-08.00.00.zip`
+  /// 手动备份文件名：`Windows_SimpleLive_backup_2026.11.27-08.00.00.zip`
   static String buildBackupFileName([DateTime? now]) {
     var t = now ?? DateTime.now();
     String two(int v) => v.toString().padLeft(2, "0");
-    return "SimpleLive_backup_"
+    return "$platformPrefix$backupNamePrefix"
         "${t.year}.${two(t.month)}.${two(t.day)}-"
         "${two(t.hour)}.${two(t.minute)}.${two(t.second)}.zip";
   }

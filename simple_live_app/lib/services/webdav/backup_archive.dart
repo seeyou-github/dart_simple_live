@@ -18,6 +18,7 @@ import 'package:simple_live_app/services/bilibili_account_service.dart';
 import 'package:simple_live_app/services/db_service.dart';
 import 'package:simple_live_app/services/douyin_account_service.dart';
 import 'package:simple_live_app/services/local_storage_service.dart';
+import 'package:simple_live_app/services/webdav/backup_client.dart';
 
 /// 备份数据包
 ///
@@ -93,8 +94,10 @@ class BackupArchive {
 
   /// 恢复备份包（合并导入）
   ///
-  /// 返回值是附加提示（部分数据未能还原时的说明），完全成功返回 null。
-  static Future<String?> importBytes(Uint8List bytes) async {
+  /// 返回结果中的 [BackupImportResult.note] 是附加提示（部分数据未能还原时
+  /// 的说明），完全成功时为 null；[BackupImportResult.basisMillis] 是备份
+  /// 生成时间，供同步时判断「哪边更新」使用。
+  static Future<BackupImportResult> importBytes(Uint8List bytes) async {
     if (bytes.length > _maxTotalBytes) {
       throw const FormatException("数据包过大");
     }
@@ -106,6 +109,22 @@ class BackupArchive {
 
     var notes = <String>[];
     var totalBytes = 0;
+
+    // 备份生成时间：恢复出的数据以它为准，避免旧备份覆盖云端较新的记录。
+    // 文件拷贝会改掉修改时间，所以用包内时间，并丢弃明显异常的未来时间。
+    var metaTime = (meta["time"] as num?)?.toInt() ?? 0;
+    var basis =
+        metaTime > 0 && metaTime <= DateTime.now().millisecondsSinceEpoch
+            ? metaTime
+            : null;
+
+    // 跨平台导入（例如把电脑上的备份拷到手机）时提示来源平台：
+    // 平台专属设置项在其它平台上未必适用
+    var sourcePlatform = "${meta["platform"] ?? ""}";
+    if (sourcePlatform.isNotEmpty &&
+        sourcePlatform != Platform.operatingSystem) {
+      notes.add("备份来自 $sourcePlatform 平台");
+    }
 
     Object? read(String name) {
       var file = _find(archive, name);
@@ -206,7 +225,10 @@ class BackupArchive {
     EventBus.instance.emit(Constant.kUpdateFollow, 0);
     EventBus.instance.emit(Constant.kUpdatePinnedCategories, 0);
 
-    return notes.isEmpty ? null : notes.toSet().join("，");
+    return BackupImportResult.done(
+      notes.isEmpty ? null : notes.toSet().join("，"),
+      basisMillis: basis,
+    );
   }
 
   static ArchiveFile? _find(Archive archive, String name) {
@@ -333,13 +355,14 @@ class BackupArchive {
       var dir = await AppDirs.appDataSubdirectory("exports");
       path = p.join(
         dir.path,
-        "simple_live_backup_${DateTime.now().millisecondsSinceEpoch ~/ 1000}.zip",
+        "${BackupClient.platformPrefix}SimpleLive_backup_"
+        "${DateTime.now().millisecondsSinceEpoch ~/ 1000}.zip",
       );
     } else {
       path = await FilePicker.platform.saveFile(
         allowedExtensions: ["zip"],
         type: FileType.custom,
-        fileName: "simple_live_backup.zip",
+        fileName: "${BackupClient.platformPrefix}SimpleLive_backup.zip",
         bytes: inlineSave ? bytes : null,
       );
     }
@@ -365,8 +388,7 @@ class BackupArchive {
     if (path == null) {
       return const BackupImportResult.cancelled();
     }
-    var note = await importBytes(await File(path).readAsBytes());
-    return BackupImportResult.done(note);
+    return importBytes(await File(path).readAsBytes());
   }
 }
 
@@ -374,12 +396,17 @@ class BackupArchive {
 class BackupImportResult {
   const BackupImportResult.cancelled()
       : applied = false,
-        note = null;
+        note = null,
+        basisMillis = null;
 
-  const BackupImportResult.done(this.note) : applied = true;
+  const BackupImportResult.done(this.note, {this.basisMillis}) : applied = true;
 
   final bool applied;
 
   /// 部分数据未能还原时的说明
   final String? note;
+
+  /// 备份生成时间（包内 meta 记录），作为同步时间基准：
+  /// 避免导入的旧数据被当成最新修改而覆盖云端较新的记录
+  final int? basisMillis;
 }

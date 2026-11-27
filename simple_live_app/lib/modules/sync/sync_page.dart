@@ -46,11 +46,23 @@ class _SyncPageState extends State<SyncPage> {
     super.dispose();
   }
 
-  Future<void> _saveConfig() => BackupClient.instance.saveConfig(
-        uri: _uriCtr.text,
-        user: _userCtr.text,
-        password: _passwordCtr.text,
-      );
+  /// 保存配置。
+  ///
+  /// 配置发生变化（首次填写 / 换设备）时安排一次同步：新设备接入时
+  /// 先把云端已有的关注、标签、固定分类、屏蔽词合并进来，再向下推进。
+  Future<void> _saveConfig({bool scheduleSync = true}) async {
+    var changed = await BackupClient.instance.saveConfig(
+      uri: _uriCtr.text,
+      user: _userCtr.text,
+      password: _passwordCtr.text,
+    );
+    if (!scheduleSync || !changed) {
+      return;
+    }
+    if (BackupClient.instance.isConfigured) {
+      BackupScheduler.scheduleSync(force: true);
+    }
+  }
 
   /// 手动备份到云端
   Future<void> _backup() async {
@@ -111,7 +123,9 @@ class _SyncPageState extends State<SyncPage> {
       return;
     }
     if (files.isEmpty) {
-      SmartDialog.showToast("云端暂无备份文件");
+      SmartDialog.showToast(
+        "云端暂无 ${BackupClient.platformLabel} 平台的备份文件",
+      );
       return;
     }
     var picked = await _pickBackup(files);
@@ -131,11 +145,14 @@ class _SyncPageState extends State<SyncPage> {
       await BackupTaskLock.run(() async {
         BackupTaskCenter.begin(task);
         var bytes = await BackupClient.instance.download(picked.name);
-        var note = await BackupArchive.importBytes(bytes);
-        // 恢复出的数据以备份文件时间为基准，避免覆盖云端较新的记录
-        BackupSync.markRestored(
-          picked.modified?.millisecondsSinceEpoch ?? 0,
-        );
+        var result = await BackupArchive.importBytes(bytes);
+        // 恢复出的数据以备份生成时间为基准，避免覆盖云端较新的记录
+        var basis =
+            result.basisMillis ?? picked.modified?.millisecondsSinceEpoch ?? 0;
+        if (basis > 0) {
+          BackupSync.markRestored(basis);
+        }
+        var note = result.note;
         SmartDialog.showToast(
           note == null ? "恢复成功" : "恢复成功，但$note",
         );
@@ -157,7 +174,8 @@ class _SyncPageState extends State<SyncPage> {
 
   /// 立即同步
   Future<void> _syncNow() async {
-    await _saveConfig();
+    // 这里马上就会同步，不再另外排队
+    await _saveConfig(scheduleSync: false);
     var result = await BackupSync.syncNow();
     switch (result.outcome) {
       case BackupSyncOutcome.success:
@@ -220,6 +238,14 @@ class _SyncPageState extends State<SyncPage> {
       if (!result.applied) {
         return;
       }
+      // 导入的数据以备份生成时间为基准：紧接着接入同步时，
+      // 云端更新的记录仍然生效，不会被刚导入的旧数据覆盖
+      var basis = result.basisMillis;
+      if (basis != null && basis > 0) {
+        BackupSync.markRestored(basis);
+      }
+      BackupScheduler.scheduleSync(force: true);
+      BackupScheduler.scheduleBackup();
       SmartDialog.showToast(
         result.note == null ? "导入成功" : "导入成功，但${result.note}",
       );
@@ -231,28 +257,47 @@ class _SyncPageState extends State<SyncPage> {
   Future<BackupFile?> _pickBackup(List<BackupFile> files) async {
     return Get.dialog<BackupFile>(
       AlertDialog(
-        title: const Text("选择备份"),
+        title: Text("选择备份（${BackupClient.platformLabel}）"),
         contentPadding: const EdgeInsets.symmetric(vertical: 12),
         content: SizedBox(
           width: double.maxFinite,
           height: 320,
-          child: ListView.builder(
-            itemCount: files.length,
-            itemBuilder: (context, index) {
-              var file = files[index];
-              return ListTile(
-                leading: const Icon(Icons.archive_outlined),
-                title: Text(
-                  file.name,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                child: Text(
+                  "仅显示当前平台（${BackupClient.platformLabel}）的备份文件；"
+                  "其它平台的备份需先导出，再用「一键导入」",
+                  style: Get.textTheme.bodySmall?.copyWith(
+                    color: Get.theme.colorScheme.outline,
+                    fontSize: 12,
+                  ),
                 ),
-                subtitle: Text(
-                  "${_formatTime(file.modified)} · ${_formatSize(file.size)}",
+              ),
+              Expanded(
+                child: ListView.builder(
+                  itemCount: files.length,
+                  itemBuilder: (context, index) {
+                    var file = files[index];
+                    return ListTile(
+                      leading: const Icon(Icons.archive_outlined),
+                      title: Text(
+                        file.name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      subtitle: Text(
+                        "${_formatTime(file.modified)} · "
+                        "${_formatSize(file.size)}",
+                      ),
+                      onTap: () => Get.back(result: file),
+                    );
+                  },
                 ),
-                onTap: () => Get.back(result: file),
-              );
-            },
+              ),
+            ],
           ),
         ),
         actions: [
@@ -395,40 +440,56 @@ class _SyncPageState extends State<SyncPage> {
             ),
             Padding(
               padding: const EdgeInsets.all(16),
-              child: ValueListenableBuilder<List<BackupTask>>(
-                valueListenable: BackupTaskCenter.active,
-                builder: (context, _, __) {
-                  var busy = BackupTaskCenter.isRunning(BackupTaskKind.backup);
-                  var restoring =
-                      BackupTaskCenter.isRunning(BackupTaskKind.restore);
-                  return Row(
-                    children: [
-                      Expanded(
-                        child: FilledButton.tonal(
-                          style: FilledButton.styleFrom(
-                            shape: RoundedRectangleBorder(
-                              borderRadius: AppStyle.radius8,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  ValueListenableBuilder<List<BackupTask>>(
+                    valueListenable: BackupTaskCenter.active,
+                    builder: (context, _, __) {
+                      var busy =
+                          BackupTaskCenter.isRunning(BackupTaskKind.backup);
+                      var restoring =
+                          BackupTaskCenter.isRunning(BackupTaskKind.restore);
+                      return Row(
+                        children: [
+                          Expanded(
+                            child: FilledButton.tonal(
+                              style: FilledButton.styleFrom(
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: AppStyle.radius8,
+                                ),
+                              ),
+                              onPressed: busy ? null : _backup,
+                              child: Text(busy ? "正在备份" : "备份设置"),
                             ),
                           ),
-                          onPressed: busy ? null : _backup,
-                          child: Text(busy ? "正在备份" : "备份设置"),
-                        ),
-                      ),
-                      const SizedBox(width: 16),
-                      Expanded(
-                        child: FilledButton.tonal(
-                          style: FilledButton.styleFrom(
-                            shape: RoundedRectangleBorder(
-                              borderRadius: AppStyle.radius8,
+                          const SizedBox(width: 16),
+                          Expanded(
+                            child: FilledButton.tonal(
+                              style: FilledButton.styleFrom(
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: AppStyle.radius8,
+                                ),
+                              ),
+                              onPressed: restoring ? null : _restore,
+                              child: Text(restoring ? "正在恢复" : "恢复设置"),
                             ),
                           ),
-                          onPressed: restoring ? null : _restore,
-                          child: Text(restoring ? "正在恢复" : "恢复设置"),
-                        ),
-                      ),
-                    ],
-                  );
-                },
+                        ],
+                      );
+                    },
+                  ),
+                  const SizedBox(height: 10),
+                  Text(
+                    "备份按平台区分：当前为 ${BackupClient.platformLabel}，"
+                    "文件名带 ${BackupClient.platformPrefix} 前缀；"
+                    "恢复时只显示当前平台的备份",
+                    style: Get.textTheme.bodySmall?.copyWith(
+                      color: Get.theme.colorScheme.outline,
+                      fontSize: 12,
+                    ),
+                  ),
+                ],
               ),
             ),
           ]),

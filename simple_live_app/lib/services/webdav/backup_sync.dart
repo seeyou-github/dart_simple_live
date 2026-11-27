@@ -157,10 +157,14 @@ class _SyncState {
   ///
   /// [restoreBasis] 是刚恢复的备份文件的修改时间：恢复出的数据以它为准，
   /// 避免把旧备份内容当成「刚刚修改」而覆盖云端较新的记录。
+  ///
+  /// [seed] 是云端已有状态：新设备首次接入同步时本地还没有基线，
+  /// 内容与云端一致的条目直接沿用云端时间戳，避免整包被当成「本地新增」。
   static _SyncState fromLocal(
     _SyncState? baseline, {
     required int now,
     int? restoreBasis,
+    _SyncState? seed,
   }) {
     var state = _SyncState();
 
@@ -170,7 +174,8 @@ class _SyncState {
     };
     for (var entry in follows.entries) {
       var map = entry.value.toJson();
-      var base = baseline?.follows[entry.key];
+      var base =
+          baseline?.follows[entry.key] ?? _seedRecord(seed?.follows[entry.key]);
       if (base != null && !base.deleted && mapEquals(base.data, map)) {
         state.follows[entry.key] = base;
       } else if (base != null) {
@@ -194,7 +199,8 @@ class _SyncState {
     };
     for (var entry in tags.entries) {
       var map = entry.value.toJson();
-      var base = baseline?.tags[entry.key];
+      var base =
+          baseline?.tags[entry.key] ?? _seedRecord(seed?.tags[entry.key]);
       if (base != null && !base.deleted && mapEquals(base.data, map)) {
         state.tags[entry.key] = base;
       } else {
@@ -209,7 +215,8 @@ class _SyncState {
     // 主页分类栏固定分类（按 站点|父分类|分类 逐项记录）
     var categories = _readPinned();
     for (var entry in categories.entries) {
-      var base = baseline?.categories[entry.key];
+      var base = baseline?.categories[entry.key] ??
+          _seedRecord(seed?.categories[entry.key]);
       if (base != null && !base.deleted && mapEquals(base.data, entry.value)) {
         state.categories[entry.key] = base;
       } else {
@@ -232,7 +239,8 @@ class _SyncState {
         if ("$word".trim().isNotEmpty) "$word".trim(): true,
     };
     for (var word in words.keys) {
-      var base = baseline?.blockWords[word];
+      var base =
+          baseline?.blockWords[word] ?? _seedRecord(seed?.blockWords[word]);
       state.blockWords[word] = base != null && !base.deleted
           ? base
           : _Record(updatedAt: restoreBasis ?? now);
@@ -241,6 +249,11 @@ class _SyncState {
 
     return state;
   }
+
+  /// 云端墓碑不参与「内容一致」判定：删除仍按时间戳合并，
+  /// 避免把本地还能看到的旧数据当成同一条记录继承时间戳而复活
+  static _Record? _seedRecord(_Record? record) =>
+      record == null || record.deleted ? null : record;
 
   static void _carryTombstones(
     Map<String, _Record> target,
@@ -507,14 +520,32 @@ class BackupSync {
   /// 刚恢复的备份文件的修改时间：恢复出的数据以它为准，不覆盖云端较新记录
   static int? _restoreBasis;
 
+  /// 基准写入时间：超过 [_restoreBasisTtl] 仍未同步就作废，
+  /// 避免之后正常的本地修改被当成旧数据
+  static DateTime? _restoreBasisAt;
+
+  static const _restoreBasisTtl = Duration(minutes: 30);
+
   /// 恢复备份期间暂停（与调度器共用同一标记）
   static bool get paused => BackupScheduler.paused;
 
   static bool get running => _running;
 
-  /// 记录恢复时间基准（在恢复完成、下一次同步前调用）
+  /// 记录恢复 / 导入的时间基准（在下一次同步前调用）
   static void markRestored(int basisMillis) {
     _restoreBasis = basisMillis;
+    _restoreBasisAt = DateTime.now();
+  }
+
+  /// 取出可用的时间基准；过期或未设置时返回 null
+  static int? _takeRestoreBasis() {
+    var basis = _restoreBasis;
+    var at = _restoreBasisAt;
+    if (basis == null || at == null) {
+      return null;
+    }
+    var age = DateTime.now().difference(at);
+    return age > _restoreBasisTtl ? null : basis;
   }
 
   /// 手动「立即同步」：不受自动同步开关、防抖与最小间隔限制
@@ -577,7 +608,8 @@ class BackupSync {
       var local = _SyncState.fromLocal(
         baseline,
         now: now,
-        restoreBasis: _restoreBasis,
+        restoreBasis: _takeRestoreBasis(),
+        seed: remote,
       );
       var merged = _SyncState.merge(local, remote);
       merged.prune(now - _tombstoneTtlMs);
@@ -601,6 +633,7 @@ class BackupSync {
         );
       }
       _restoreBasis = null;
+      _restoreBasisAt = null;
       BackupScheduler.markSynced();
       return const BackupSyncResult.success();
     } catch (e) {
@@ -788,6 +821,8 @@ class BackupScheduler {
           bytes,
           BackupClient.autoBackupFileName,
         );
+        // 旧版自动备份（平台名在后）删除，避免恢复列表出现重复项
+        await BackupClient.instance.removeLegacyAutoBackup();
         SmartDialog.showToast("自动备份成功");
       });
     } catch (e) {
