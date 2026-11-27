@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:simple_live_app/app/app_style.dart';
@@ -10,6 +12,7 @@ class HomePage extends GetView<HomeController> {
 
   @override
   Widget build(BuildContext context) {
+    var isMobile = Platform.isAndroid || Platform.isIOS;
     return Scaffold(
       appBar: AppBar(
         titleSpacing: 8,
@@ -22,18 +25,22 @@ class HomePage extends GetView<HomeController> {
           tabs: Sites.supportSites
               .map(
                 (e) => Tab(
-                  //text: e.name,
-
-                  child: Row(
-                    children: [
-                      Image.asset(
-                        e.logo,
-                        width: 24,
-                      ),
-                      AppStyle.hGap8,
-                      Text(e.name),
-                    ],
-                  ),
+                  // 移动端仅显示平台图标，不显示名称；桌面端保留名称
+                  child: isMobile
+                      ? Image.asset(
+                          e.logo,
+                          width: 24,
+                        )
+                      : Row(
+                          children: [
+                            Image.asset(
+                              e.logo,
+                              width: 24,
+                            ),
+                            AppStyle.hGap8,
+                            Text(e.name),
+                          ],
+                        ),
                 ),
               )
               .toList(),
