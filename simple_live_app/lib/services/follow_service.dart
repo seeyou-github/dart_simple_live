@@ -33,18 +33,20 @@ class FollowService extends GetxService {
   /// 未直播的用户列表
   RxList<FollowUser> notLiveList = RxList<FollowUser>();
 
-  /// 已经更新状态的数量
-  var updatedCount = 0;
-
   /// 是否正在更新
   var updating = false.obs;
+
+  /// 状态更新期间又收到刷新请求（同步成功、关注/取消关注等），
+  /// 等当前一轮结束后再检查一次，避免并发更新互相覆盖
+  bool _updateStatusPending = false;
 
   Timer? updateTimer;
 
   @override
   void onInit() {
     subscription = EventBus.instance.listen(Constant.kUpdateFollow, (p0) {
-      loadData(updateStatus: false);
+      // 同步成功、关注/取消关注后：立即刷新关注页，并重新检测直播状态
+      loadData();
     });
     initTimer();
     super.onInit();
@@ -73,22 +75,20 @@ class FollowService extends GetxService {
     }
   }
 
-  Future<void> loadData({bool updateStatus = true}) async {
+  Future<void> loadData() async {
     var list = DBService.instance.getFollowList();
     followList.assignAll(list);
     if (list.isEmpty) {
-      updating.value = false;
-      // 列表清空也要立即通知关注页，避免残留旧数据
+      _updateStatusPending = false;
+      // 列表清空也要立即通知关注页，避免残留旧数据；
+      // 若上一轮状态检查仍在收尾，由它负责关闭 updating
       filterData();
       return;
     }
-    if (updateStatus) {
-      // liveStatus 不入库，等状态更新完成后统一 filterData()，避免排序闪烁
-      startUpdateStatus();
-    } else {
-      // 同步成功、关注/取消关注等无需重查状态的变更，立即通知关注页刷新
-      filterData();
-    }
+    // 立即通知关注页刷新，让同步 / 关注变更马上可见
+    // （新关注先显示“读取中”），状态检查完成后再统一排序刷新
+    filterData();
+    startUpdateStatus();
   }
 
   /// 获取最优并发数
@@ -131,9 +131,23 @@ class FollowService extends GetxService {
   }
 
   void startUpdateStatus() async {
-    updatedCount = 0;
+    if (updating.value) {
+      // 正在检查时又收到新的刷新请求，等这一轮结束后再重新检查
+      _updateStatusPending = true;
+      return;
+    }
     updating.value = true;
+    do {
+      _updateStatusPending = false;
+      await _updateAllStatus();
+      // 检查期间 followList 可能已被新的同步 / 关注变更替换，这里按最新列表排序
+      filterData();
+    } while (_updateStatusPending && followList.isNotEmpty);
+    Log.logPrint("关注状态更新完成");
+    updating.value = false;
+  }
 
+  Future<void> _updateAllStatus() async {
     var concurrency = getOptimalConcurrency();
 
     Log.logPrint("开始更新关注状态，并发数: $concurrency，总数: ${followList.length}");
@@ -159,8 +173,6 @@ class FollowService extends GetxService {
     }
 
     await Future.wait(workers);
-
-    Log.logPrint("关注状态更新完成");
   }
 
   Future updateLiveStatus(FollowUser item) async {
@@ -180,12 +192,6 @@ class FollowService extends GetxService {
       Log.logPrint(e);
       item.liveStatus.value = 0;
       item.liveStartTime = null;
-    } finally {
-      updatedCount++;
-      if (updatedCount >= followList.length) {
-        filterData();
-        updating.value = false;
-      }
     }
   }
 
