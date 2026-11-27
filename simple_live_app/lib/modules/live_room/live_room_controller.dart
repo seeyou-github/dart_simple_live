@@ -460,6 +460,10 @@ class LiveRoomController extends PlayerController
     errorMsg.value = "";
 
     await player.jump(currentLineIndex);
+    // 切换线路会重新打开解码器，音频模式下需要再次关闭视频解码
+    if (audioMode.value) {
+      await setVideoTrackEnabled(false);
+    }
   }
 
   @override
@@ -1032,8 +1036,12 @@ ${error?.stackTrace}''');
   void didChangeAppLifecycleState(AppLifecycleState state) {
     super.didChangeAppLifecycleState(state);
 
-    if (state == AppLifecycleState.paused ||
-        state == AppLifecycleState.hidden) {
+    // 桌面端「失焦但仍可见」通常只上报 inactive，必须一并当作后台处理
+    final desktop = !Platform.isAndroid && !Platform.isIOS;
+    final enteredBackground = state == AppLifecycleState.paused ||
+        state == AppLifecycleState.hidden ||
+        (desktop && state == AppLifecycleState.inactive);
+    if (enteredBackground) {
       Log.d("进入后台");
       //进入后台，关闭弹幕
       danmakuController?.clear();
@@ -1082,24 +1090,28 @@ ${error?.stackTrace}''');
   /// 桌面端：最小化
   @override
   void onWindowMinimize() {
+    isBackground = true;
     scheduleAutoAudioMode();
   }
 
-  /// 桌面端：从小窗还原
+  /// 桌面端：从最小化还原
   @override
   void onWindowRestore() {
+    isBackground = false;
     cancelAutoAudioMode();
   }
 
   /// 桌面端：窗口失去焦点
   @override
   void onWindowBlur() {
+    isBackground = true;
     scheduleAutoAudioMode();
   }
 
   /// 桌面端：窗口重新获得焦点
   @override
   void onWindowFocus() {
+    isBackground = false;
     cancelAutoAudioMode();
   }
 

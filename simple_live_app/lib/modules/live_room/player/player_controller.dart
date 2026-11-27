@@ -124,6 +124,9 @@ mixin PlayerStateMixin on PlayerMixin {
   /// 桌面端最小化 / 失去焦点后延迟进入音频模式的计时器
   Timer? audioModeDelayTimer;
 
+  /// 桌面端进入后台的起始时间（按真实窗口状态计时，不依赖事件顺序）
+  DateTime? desktopBackgroundSince;
+
   /// 是否应显示全屏播放器 UI（系统全屏 或 窗口全屏）
   bool get isFullScreenUI => fullScreenState.value || windowFullScreenState.value;
 
@@ -387,6 +390,10 @@ mixin PlayerSystemMixin on PlayerMixin, PlayerStateMixin, PlayerDanmakuMixin {
   }
 
   /// 桌面端：窗口最小化或失去焦点 5 秒后自动进入音频模式
+  ///
+  /// 每秒核对一次真实窗口状态，而不是只起一个一次性定时器：
+  /// 最小化 / 失焦时，系统可能紧接着派发 focus / restore 事件，
+  /// 一次性定时器会被 cancelAutoAudioMode() 抹掉，导致永远不会进入。
   void scheduleAutoAudioMode() {
     if (Platform.isAndroid || Platform.isIOS) {
       return;
@@ -398,19 +405,46 @@ mixin PlayerSystemMixin on PlayerMixin, PlayerStateMixin, PlayerDanmakuMixin {
     if (audioMode.value || audioModeManual) {
       return;
     }
+    desktopBackgroundSince ??= DateTime.now();
     audioModeDelayTimer?.cancel();
-    audioModeDelayTimer = Timer(const Duration(seconds: 5), () {
-      audioModeDelayTimer = null;
-      if (!audioModeManual) {
-        enterAudioMode();
-      }
+    audioModeDelayTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+      _checkDesktopAudioMode();
     });
+  }
+
+  /// 按窗口真实状态决定是否进入 / 退出自动音频模式
+  Future<void> _checkDesktopAudioMode() async {
+    try {
+      var minimized = await windowManager.isMinimized();
+      var focused = await windowManager.isFocused();
+      if (!minimized && focused) {
+        // 窗口已回到前台，撤销待进入的音频模式
+        cancelAutoAudioMode();
+        return;
+      }
+      var since = desktopBackgroundSince ?? DateTime.now();
+      desktopBackgroundSince = since;
+      if (DateTime.now().difference(since) < const Duration(seconds: 5)) {
+        return;
+      }
+      if (!audioMode.value && !audioModeManual) {
+        Log.d("桌面端后台超过5秒，自动进入音频模式");
+        await enterAudioMode();
+        // enterAudioMode 会取消定时器，这里重新挂上以监听窗口恢复焦点
+        audioModeDelayTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+          _checkDesktopAudioMode();
+        });
+      }
+    } catch (e) {
+      Log.logPrint(e);
+    }
   }
 
   /// 桌面端：窗口重新获得焦点 / 还原时退出自动进入的音频模式
   void cancelAutoAudioMode() {
     audioModeDelayTimer?.cancel();
     audioModeDelayTimer = null;
+    desktopBackgroundSince = null;
     if (audioMode.value && !audioModeManual) {
       exitAudioMode();
     }
