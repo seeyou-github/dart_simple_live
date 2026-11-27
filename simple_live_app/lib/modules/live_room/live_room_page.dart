@@ -191,7 +191,7 @@ class LiveRoomPage extends GetView<LiveRoomController> {
         // Video 使用 GlobalKey，重建不中断播放。
         Obx(
           () {
-            // 「进入后台自动暂停」开启时，进后台暂停播放；
+            // （移动端）「进入后台自动暂停」开启时，进后台暂停播放；
             // 音频模式下（含手动开启）进后台应继续播放音频，不暂停
             final pauseOnBackground =
                 AppSettingsController.instance.playerAutoPause.value &&

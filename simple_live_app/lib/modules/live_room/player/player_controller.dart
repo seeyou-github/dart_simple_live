@@ -327,11 +327,15 @@ mixin PlayerSystemMixin on PlayerMixin, PlayerStateMixin, PlayerDanmakuMixin {
   ///
   /// [manual] 为用户手动开启：回到前台 / 窗口重新获得焦点时不会自动退出。
   ///
-  /// 「设置 - 直播间设置 - 进入后台自动暂停」开启时，最小化 / 失焦
-  /// 一律不自动进入音频模式（保持暂停），仅手动开关不受此限制。
+  /// 「设置 - 直播间设置 - 进入后台自动暂停」只对移动端生效：移动端进入后台
+  /// 等于离开 App，开启该开关时应保持暂停，不自动进入音频模式；桌面端最小化 /
+  /// 失焦本来就是「只听声音」的使用场景，不受该开关限制。
   Future<void> enterAudioMode({bool manual = false}) async {
-    // 自动进入路径统一拦截：后台自动暂停开启时不进入音频模式
-    if (!manual && AppSettingsController.instance.playerAutoPause.value) {
+    // 自动进入路径统一拦截（仅移动端）：后台自动暂停开启时不进入音频模式
+    if (!manual &&
+        (Platform.isAndroid || Platform.isIOS) &&
+        AppSettingsController.instance.playerAutoPause.value) {
+      Log.d("已开启「进入后台自动暂停」，跳过自动进入音频模式");
       return;
     }
     audioModeManual = audioModeManual || manual;

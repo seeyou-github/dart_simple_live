@@ -1353,10 +1353,6 @@ ${error?.stackTrace}''');
     if (Platform.isAndroid || Platform.isIOS) {
       return;
     }
-    // 「进入后台自动暂停」开启时不进入音频模式，也无需后台监控
-    if (AppSettingsController.instance.playerAutoPause.value) {
-      return;
-    }
     // 小窗常驻桌面播放，失焦后仍需显示画面
     if (smallWindowState.value) {
       return;
