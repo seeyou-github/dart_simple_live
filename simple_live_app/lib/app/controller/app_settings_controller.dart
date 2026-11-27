@@ -35,6 +35,8 @@ class AppSettingsController extends GetxController {
         .getValue(LocalStorageService.kDanmuSpeed, 10.0);
     danmuEnable.value = LocalStorageService.instance
         .getValue(LocalStorageService.kDanmuEnable, true);
+    // 弹幕运行时开关：仅启动时以「默认开关」为初始值，不持久化
+    danmuRuntimeEnable.value = danmuEnable.value;
     danmuFilterRepeat.value = LocalStorageService.instance
         .getValue(LocalStorageService.kDanmuFilterRepeat, true);
     danmuFilterEmoji.value = LocalStorageService.instance
@@ -306,6 +308,12 @@ class AppSettingsController extends GetxController {
     danmuEnable.value = e;
     LocalStorageService.instance.setValue(LocalStorageService.kDanmuEnable, e);
   }
+
+  /// 弹幕运行时开关（播放器底栏的临时开关）
+  ///
+  /// 仅运行时有效、全局共享，不持久化，不写入「默认开关」；
+  /// 启动软件时以「默认开关」为初始值，退出播放页不重置，关闭软件失效。
+  var danmuRuntimeEnable = true.obs;
 
   /// 过滤重复弹幕
   var danmuFilterRepeat = true.obs;

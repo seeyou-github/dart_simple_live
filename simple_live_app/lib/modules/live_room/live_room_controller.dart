@@ -162,12 +162,8 @@ class LiveRoomController extends PlayerController
       FollowService.instance.loadData();
     }
     initAutoExit();
-    showDanmakuState.value = AppSettingsController.instance.danmuEnable.value;
-    // 播放器底栏的弹幕开关是会话级临时开关，不写入设置；
-    // 设置页修改「默认开关」后仍同步到当前播放页
-    ever(AppSettingsController.instance.danmuEnable, (bool value) {
-      showDanmakuState.value = value;
-    });
+    // 弹幕运行时开关在 AppSettingsController.onInit 中按「默认开关」初始化，
+    // 播放页不再单独重置，退出播放页后仍然有效
     followed.value = DBService.instance.getFollowExist("${site.id}_$roomId");
     loadData();
 
