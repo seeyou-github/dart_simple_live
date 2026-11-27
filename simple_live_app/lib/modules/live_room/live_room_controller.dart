@@ -1258,9 +1258,12 @@ ${error?.stackTrace}''');
       isBackground = true;
       if (Platform.isAndroid || Platform.isIOS) {
         // 移动端进入后台：直接切音频模式，由前台服务保活并显示通知。
-        // 用户显式设置了「后台暂停」时保持暂停，不自动切音频模式。
+        // 用户显式设置了「后台暂停」时保持暂停，不自动切音频模式；
+        // 但已手动进入音频模式时音频必须继续，这里兜底恢复可能被打断的播放。
         if (!AppSettingsController.instance.playerAutoPause.value) {
           enterAudioMode();
+        } else if (audioMode.value) {
+          _keepPlayingInAudioMode();
         }
       } else {
         // 桌面端：最小化 / 失焦立即进入音频模式
@@ -1317,6 +1320,27 @@ ${error?.stackTrace}''');
       _suppressAutoAudioMode = true;
     }
     applyRoomActivityState();
+  }
+
+  /// 移动端音频模式下进入后台：确保音频继续播放
+  ///
+  /// media_kit 的 Video 组件在后台事件里会同步调用 pause，若其
+  /// pauseUponEnteringBackgroundMode 配置未及时更新，音频会被一并停掉。
+  /// 页面已用 Obx 包裹 Video 保证配置实时同步，这里再做一次短延迟核对兜底：
+  /// 进后台前正在播放、进后台后却被暂停，则恢复播放。
+  void _keepPlayingInAudioMode() {
+    if (!player.state.playing) {
+      return;
+    }
+    Future.delayed(const Duration(milliseconds: 400), () {
+      if (isClosed || !isBackground || !audioMode.value) {
+        return;
+      }
+      if (!player.state.playing) {
+        Log.d("音频模式进后台播放被打断，恢复播放");
+        player.play();
+      }
+    });
   }
 
   /// 桌面端：最小化 / 失焦后立即进入音频模式，并启动后台监控自愈

@@ -184,24 +184,32 @@ class LiveRoomPage extends GetView<LiveRoomController> {
     }
     return Stack(
       children: [
-        Video(
-          key: controller.globalPlayerKey,
-          controller: controller.videoController,
-          // 「进入后台自动暂停」开启时，进后台暂停播放；
-          // 音频模式下（含手动开启）进后台应继续播放音频，不暂停
-          pauseUponEnteringBackgroundMode:
-              AppSettingsController.instance.playerAutoPause.value &&
-              !controller.audioMode.value,
-          resumeUponEnteringForegroundMode:
-              AppSettingsController.instance.playerAutoPause.value &&
-              !controller.audioMode.value,
-          controls: (state) {
-            return playerControls(state, controller);
+        // 必须用 Obx 单独包裹 Video：本方法在 OrientationBuilder / PiPSwitcher
+        // 的回调里构建，那里读到的 Rx 不会被页面外层 Obx 追踪，音频模式切换后
+        // Video 不会重建、配置不更新，进后台依旧被 media_kit 暂停。
+        // Obx 内读取 audioMode / playerAutoPause，切换时实时更新 Video 配置；
+        // Video 使用 GlobalKey，重建不中断播放。
+        Obx(
+          () {
+            // 「进入后台自动暂停」开启时，进后台暂停播放；
+            // 音频模式下（含手动开启）进后台应继续播放音频，不暂停
+            final pauseOnBackground =
+                AppSettingsController.instance.playerAutoPause.value &&
+                    !controller.audioMode.value;
+            return Video(
+              key: controller.globalPlayerKey,
+              controller: controller.videoController,
+              pauseUponEnteringBackgroundMode: pauseOnBackground,
+              resumeUponEnteringForegroundMode: pauseOnBackground,
+              controls: (state) {
+                return playerControls(state, controller);
+              },
+              aspectRatio: aspectRatio,
+              fit: boxFit,
+              // 自己实现
+              wakelock: false,
+            );
           },
-          aspectRatio: aspectRatio,
-          fit: boxFit,
-          // 自己实现
-          wakelock: false,
         ),
         Obx(
           () => Visibility(
