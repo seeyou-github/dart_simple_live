@@ -674,6 +674,10 @@ class LiveRoomController extends PlayerController
   }
 
   void showQualitySheet() {
+    if (qualites.isEmpty) {
+      SmartDialog.showToast("暂无可用分辨率");
+      return;
+    }
     Utils.showBottomSheet(
       title: "切换清晰度",
       child: RadioGroup(

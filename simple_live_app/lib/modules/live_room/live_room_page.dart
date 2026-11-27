@@ -486,6 +486,24 @@ class LiveRoomPage extends GetView<LiveRoomController> {
     return ListView(
       padding: AppStyle.edgeInsetsA12,
       children: [
+        Padding(
+          padding: AppStyle.edgeInsetsA12,
+          child: Text(
+            "播放",
+            style: Get.textTheme.titleSmall,
+          ),
+        ),
+        SettingsCard(
+          child: Obx(
+            () => SettingsAction(
+              title: "分辨率",
+              value: controller.currentQualityInfo.value.isEmpty
+                  ? "加载中"
+                  : controller.currentQualityInfo.value,
+              onTap: controller.showQualitySheet,
+            ),
+          ),
+        ),
         Obx(
           () => Visibility(
             visible: controller.autoExitEnable.value,
