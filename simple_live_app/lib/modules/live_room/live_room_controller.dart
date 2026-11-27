@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:collection';
 import 'dart:io';
 
 import 'package:connectivity_plus/connectivity_plus.dart';
@@ -25,6 +26,8 @@ import 'package:simple_live_app/services/db_service.dart';
 import 'package:simple_live_app/services/follow_service.dart';
 import 'package:simple_live_app/widgets/desktop_refresh_button.dart';
 import 'package:simple_live_app/widgets/follow_user_item.dart';
+import 'package:simple_live_app/widgets/settings/settings_card.dart';
+import 'package:simple_live_app/widgets/settings/settings_switch.dart';
 import 'package:simple_live_core/simple_live_core.dart';
 import 'package:url_launcher/url_launcher_string.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
@@ -104,6 +107,22 @@ class LiveRoomController extends PlayerController
 
   /// 直播间活动是否已挂起（音频模式 / 后台：弹幕连接断开、计时暂停）
   bool _roomActivitySuspended = false;
+
+  /// 最近显示过的弹幕内容（用于过滤重复弹幕，最多保留 100 条）
+  final Queue<String> _recentDanmakuTexts = Queue<String>();
+
+  /// 表情字符（含修饰符、变体选择符、零宽连接符、键帽符）
+  static final RegExp _emojiCharRegExp = RegExp(
+    r'[\u{1F000}-\u{1FFFF}\u{2190}-\u{21FF}\u{2300}-\u{23FF}'
+    r'\u{2600}-\u{27BF}\u{2B00}-\u{2BFF}\u{FE0F}\u{200D}\u{20E3}]',
+    unicode: true,
+  );
+
+  /// [xx] 风格表情标签（如 [捂脸]）
+  static final RegExp _emoteTagRegExp = RegExp(r"\[[^\[\]]{1,10}\]");
+
+  /// 纯数字内容（仅数字与空白）
+  static final RegExp _pureNumberRegExp = RegExp(r"^[\d\s]+$");
 
   /// 直播间加载失败
   var loadError = false.obs;
@@ -250,6 +269,13 @@ class LiveRoomController extends PlayerController
         }
       }
 
+      // 过滤规则：重复弹幕 / 纯表情弹幕 / 纯数字弹幕
+      if (_isFilteredByRules(msg.message)) {
+        return;
+      }
+      // 记录最近显示的弹幕内容，用于重复弹幕过滤
+      _recordRecentDanmaku(msg.message);
+
       messages.add(msg);
 
       if (!isBackground && !audioMode.value) {
@@ -277,6 +303,60 @@ class LiveRoomController extends PlayerController
       online.value = msg.data;
     } else if (msg.type == LiveMessageType.superChat) {
       superChats.add(msg.data);
+    }
+  }
+
+  /// 过滤规则：重复弹幕 / 纯表情弹幕 / 纯数字弹幕
+  ///（开关在「关键词屏蔽」弹框中，默认开启；同时作用于弹幕与聊天区）
+  bool _isFilteredByRules(String message) {
+    var settings = AppSettingsController.instance;
+    var text = message.trim();
+    // 重复弹幕：与最近显示的 100 条对比；
+    // 接受后立即记录，同一批弹幕内的重复也会被过滤
+    if (settings.danmuFilterRepeat.value &&
+        _recentDanmakuTexts.contains(text)) {
+      return true;
+    }
+    if (settings.danmuFilterEmoji.value && _isPureEmoji(text)) {
+      return true;
+    }
+    if (settings.danmuFilterNumber.value && _isPureNumber(text)) {
+      return true;
+    }
+    return false;
+  }
+
+  /// 是否为纯表情弹幕：仅由 Unicode 表情字符或 [xx] 表情标签构成
+  ///（允许空白与表情修饰符；纯数字标签如 [666] 不按表情处理）
+  bool _isPureEmoji(String text) {
+    if (text.isEmpty) {
+      return false;
+    }
+    var hasEmoji = _emojiCharRegExp.hasMatch(text);
+    var remainder = text.replaceAllMapped(_emoteTagRegExp, (match) {
+      var inner = match.group(0)!;
+      inner = inner.substring(1, inner.length - 1).trim();
+      if (inner.isEmpty || int.tryParse(inner) != null) {
+        // 非表情标签，保留内容参与后续判断
+        return inner;
+      }
+      hasEmoji = true;
+      return "";
+    });
+    remainder = remainder.replaceAll(_emojiCharRegExp, "");
+    return hasEmoji && remainder.trim().isEmpty;
+  }
+
+  /// 是否为纯数字弹幕：仅由数字与空白构成（至少含一个数字）
+  bool _isPureNumber(String text) {
+    return text.isNotEmpty && _pureNumberRegExp.hasMatch(text);
+  }
+
+  /// 记录最近显示的弹幕内容（最多 100 条），用于重复弹幕过滤
+  void _recordRecentDanmaku(String message) {
+    _recentDanmakuTexts.addLast(message.trim());
+    while (_recentDanmakuTexts.length > 100) {
+      _recentDanmakuTexts.removeFirst();
     }
   }
 
@@ -880,6 +960,52 @@ class LiveRoomController extends PlayerController
                   .toList(),
             ),
           ),
+          Padding(
+            padding: AppStyle.edgeInsetsA12.copyWith(top: 24),
+            child: Text("过滤规则", style: Get.textTheme.titleSmall),
+          ),
+          SettingsCard(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Obx(
+                  () => SettingsSwitch(
+                    title: "过滤重复弹幕",
+                    subtitle: "与最近显示的 100 条弹幕对比，去除重复内容",
+                    value:
+                        AppSettingsController.instance.danmuFilterRepeat.value,
+                    onChanged: (e) {
+                      AppSettingsController.instance.setDanmuFilterRepeat(e);
+                    },
+                  ),
+                ),
+                AppStyle.divider,
+                Obx(
+                  () => SettingsSwitch(
+                    title: "过滤纯表情弹幕",
+                    subtitle: "只含表情符号或[表情]标签的弹幕不再显示",
+                    value:
+                        AppSettingsController.instance.danmuFilterEmoji.value,
+                    onChanged: (e) {
+                      AppSettingsController.instance.setDanmuFilterEmoji(e);
+                    },
+                  ),
+                ),
+                AppStyle.divider,
+                Obx(
+                  () => SettingsSwitch(
+                    title: "过滤纯数字弹幕",
+                    subtitle: "只含数字的弹幕（如 666、233）不再显示",
+                    value:
+                        AppSettingsController.instance.danmuFilterNumber.value,
+                    onChanged: (e) {
+                      AppSettingsController.instance.setDanmuFilterNumber(e);
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
         ],
       ),
     );
@@ -1041,6 +1167,8 @@ class LiveRoomController extends PlayerController
     messages.clear();
     superChats.clear();
     danmakuController?.clear();
+    // 换房间后重复弹幕对比不跨房间
+    _recentDanmakuTexts.clear();
 
     // 重新设置LiveDanmaku
     liveDanmaku = site.liveSite.getDanmaku();

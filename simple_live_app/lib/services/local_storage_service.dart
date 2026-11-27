@@ -60,6 +60,15 @@ class LocalStorageService extends GetxService {
   /// 弹幕开启
   static const String kDanmuEnable = "DanmuEnable";
 
+  /// 过滤重复弹幕
+  static const String kDanmuFilterRepeat = "DanmuFilterRepeat";
+
+  /// 过滤纯表情弹幕
+  static const String kDanmuFilterEmoji = "DanmuFilterEmoji";
+
+  /// 过滤纯数字弹幕
+  static const String kDanmuFilterNumber = "DanmuFilterNumber";
+
   /// 弹幕字重
   static const String kDanmuFontWeight = "DanmuFontWeight";
 

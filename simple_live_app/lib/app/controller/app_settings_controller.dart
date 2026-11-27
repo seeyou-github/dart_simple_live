@@ -35,6 +35,12 @@ class AppSettingsController extends GetxController {
         .getValue(LocalStorageService.kDanmuSpeed, 10.0);
     danmuEnable.value = LocalStorageService.instance
         .getValue(LocalStorageService.kDanmuEnable, true);
+    danmuFilterRepeat.value = LocalStorageService.instance
+        .getValue(LocalStorageService.kDanmuFilterRepeat, true);
+    danmuFilterEmoji.value = LocalStorageService.instance
+        .getValue(LocalStorageService.kDanmuFilterEmoji, true);
+    danmuFilterNumber.value = LocalStorageService.instance
+        .getValue(LocalStorageService.kDanmuFilterNumber, true);
     danmuStrokeWidth.value = LocalStorageService.instance
         .getValue(LocalStorageService.kDanmuStrokeWidth, 2.0);
     danmuTopMargin.value = LocalStorageService.instance
@@ -297,6 +303,30 @@ class AppSettingsController extends GetxController {
   void setDanmuEnable(bool e) {
     danmuEnable.value = e;
     LocalStorageService.instance.setValue(LocalStorageService.kDanmuEnable, e);
+  }
+
+  /// 过滤重复弹幕
+  var danmuFilterRepeat = true.obs;
+  void setDanmuFilterRepeat(bool e) {
+    danmuFilterRepeat.value = e;
+    LocalStorageService.instance
+        .setValue(LocalStorageService.kDanmuFilterRepeat, e);
+  }
+
+  /// 过滤纯表情弹幕
+  var danmuFilterEmoji = true.obs;
+  void setDanmuFilterEmoji(bool e) {
+    danmuFilterEmoji.value = e;
+    LocalStorageService.instance
+        .setValue(LocalStorageService.kDanmuFilterEmoji, e);
+  }
+
+  /// 过滤纯数字弹幕
+  var danmuFilterNumber = true.obs;
+  void setDanmuFilterNumber(bool e) {
+    danmuFilterNumber.value = e;
+    LocalStorageService.instance
+        .setValue(LocalStorageService.kDanmuFilterNumber, e);
   }
 
   var danmuStrokeWidth = 2.0.obs;
