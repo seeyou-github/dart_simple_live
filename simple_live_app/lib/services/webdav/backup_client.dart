@@ -266,6 +266,11 @@ class BackupClient {
       if (!name.toLowerCase().endsWith(".zip")) {
         continue;
       }
+      // 旧版本的 backup.zip 结构不同，无法恢复，不在列表里显示
+      if (!name.startsWith("SimpleLive_backup_") &&
+          !name.startsWith("SimpleLive_AutoBackup_")) {
+        continue;
+      }
       list.add(
         BackupFile(
           name: name,
