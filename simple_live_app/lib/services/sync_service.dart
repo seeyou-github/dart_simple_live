@@ -11,7 +11,6 @@ import 'package:simple_live_app/app/event_bus.dart';
 import 'package:simple_live_app/app/log.dart';
 import 'package:simple_live_app/app/utils.dart';
 import 'package:simple_live_app/models/db/follow_user.dart';
-import 'package:simple_live_app/models/db/follow_user_tag.dart';
 import 'package:simple_live_app/models/db/history.dart';
 import 'package:simple_live_app/modules/home/home_category_bar.dart';
 import 'package:simple_live_app/services/bilibili_account_service.dart';
@@ -188,7 +187,6 @@ class SyncService extends GetxService {
       serverRouter.get('/', _helloRequest);
       serverRouter.get('/info', _infoRequest);
       serverRouter.post('/sync/follow', _syncFollowUserReuqest);
-      serverRouter.post('/sync/tag', _syncFollowUserTagRequest);
       serverRouter.post('/sync/history', _syncHistoryReuqest);
       serverRouter.post('/sync/blocked_word', _syncBlockedWordReuqest);
       serverRouter.post('/sync/account/bilibili', _syncBiliAccountReuqest);
@@ -257,34 +255,6 @@ class SyncService extends GetxService {
       }
 
       SmartDialog.showToast('已同步关注用户列表');
-      EventBus.instance.emit(Constant.kUpdateFollow, 0);
-      return toJsonResponse({'status': true, 'message': 'success'});
-    } catch (e) {
-      return toJsonResponse({'status': false, 'message': e.toString()});
-    }
-  }
-
-  /// 同步标签列表
-  Future<shelf.Response> _syncFollowUserTagRequest(
-    shelf.Request request,
-  ) async {
-    try {
-      var overlay = int.parse(
-        request.requestedUri.queryParameters['overlay'] ?? '0',
-      );
-
-      var body = await request.readAsString();
-      Log.d('_syncFollowUserTagRequest: $body');
-      var jsonBody = json.decode(body);
-      if (overlay == 1) {
-        await DBService.instance.tagBox.clear();
-      }
-      for (var item in jsonBody) {
-        var tag = FollowUserTag.fromJson(item);
-        await DBService.instance.tagBox.put(tag.id, tag);
-      }
-
-      SmartDialog.showToast('已同步标签列表');
       EventBus.instance.emit(Constant.kUpdateFollow, 0);
       return toJsonResponse({'status': true, 'message': 'success'});
     } catch (e) {

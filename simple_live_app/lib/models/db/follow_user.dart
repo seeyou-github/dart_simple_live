@@ -12,7 +12,6 @@ class FollowUser {
     required this.userName,
     required this.face,
     required this.addTime,
-    this.tag = "全部"
   });
 
   ///id=siteId_roomId
@@ -34,9 +33,6 @@ class FollowUser {
   @HiveField(5)
   DateTime addTime;
 
-  @HiveField(6)
-  String tag;
-
   /// 直播状态
   /// 0=未知(加载中) 1=未开播 2=直播中
   Rx<int> liveStatus = 0.obs;
@@ -51,7 +47,6 @@ class FollowUser {
         userName: json['userName'],
         face: json['face'],
         addTime: DateTime.parse(json['addTime']),
-        tag: json["tag"]??"全部",
       );
 
   Map<String, dynamic> toJson() => {
@@ -61,6 +56,5 @@ class FollowUser {
         'userName': userName,
         'face': face,
         'addTime': addTime.toString(),
-        'tag':tag,
       };
 }

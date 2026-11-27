@@ -13,7 +13,6 @@ import 'package:simple_live_app/app/controller/app_settings_controller.dart';
 import 'package:simple_live_app/app/event_bus.dart';
 import 'package:simple_live_app/app/log.dart';
 import 'package:simple_live_app/models/db/follow_user.dart';
-import 'package:simple_live_app/models/db/follow_user_tag.dart';
 import 'package:simple_live_app/services/bilibili_account_service.dart';
 import 'package:simple_live_app/services/db_service.dart';
 import 'package:simple_live_app/services/douyin_account_service.dart';
@@ -22,17 +21,16 @@ import 'package:simple_live_app/services/webdav/backup_client.dart';
 
 /// 备份数据包
 ///
-/// 包含：本地关注、本地关注标签、设置（含主页分类栏固定分类）、
-/// 账号、弹幕屏蔽词。**不包含播放历史**。
+/// 包含：本地关注、设置（含主页分类栏固定分类）、账号、弹幕屏蔽词。
+/// **不包含播放历史，也不包含关注标签**（标签功能已移除）。
 ///
-/// 恢复时关注、标签、固定分类、屏蔽词采用合并方式（不删除本地已有条目），
+/// 恢复时关注、固定分类、屏蔽词采用合并方式（不删除本地已有条目），
 /// 设置与账号按备份覆盖；同步基线不会被覆盖。
 class BackupArchive {
   BackupArchive._();
 
   static const metaFileName = "meta.json";
   static const followsFileName = "follows.json";
-  static const tagsFileName = "tags.json";
   static const settingsFileName = "settings.json";
   static const accountFileName = "account.json";
   static const blockWordsFileName = "blockwords.json";
@@ -58,8 +56,6 @@ class BackupArchive {
         .getFollowList()
         .map((e) => e.toJson())
         .toList();
-    var tags =
-        DBService.instance.getFollowTagList().map((e) => e.toJson()).toList();
     var settings = LocalStorageService.instance.settingsBox.toMap();
     var account = {
       "bilibili": BiliBiliAccountService.instance.cookie,
@@ -83,7 +79,6 @@ class BackupArchive {
       "version": 1,
     });
     addJson(followsFileName, follows);
-    addJson(tagsFileName, tags);
     addJson(settingsFileName, settings);
     addJson(accountFileName, account);
     addJson(blockWordsFileName, blockWords);
@@ -159,34 +154,6 @@ class BackupArchive {
       }
       if (douyin.isNotEmpty) {
         DouyinAccountService.instance.setCookie(douyin);
-      }
-    }
-
-    // 关注标签（先于关注导入）
-    var tags = read(tagsFileName);
-    if (tags is List) {
-      for (var item in tags) {
-        if (item is! Map) {
-          continue;
-        }
-        try {
-          var tag = FollowUserTag.fromJson(Map<String, dynamic>.from(item));
-          if (tag.id.isEmpty) {
-            continue;
-          }
-          var local = DBService.instance.tagBox.get(tag.id);
-          if (local == null) {
-            await DBService.instance.tagBox.put(tag.id, tag);
-          } else {
-            // 合并标签下的关注 id，不删除本地已有关联
-            local.userId.addAll(
-              tag.userId.where((e) => !local.userId.contains(e)),
-            );
-            await DBService.instance.updateFollowTag(local);
-          }
-        } catch (e) {
-          notes.add("标签导入部分失败");
-        }
       }
     }
 

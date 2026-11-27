@@ -49,7 +49,7 @@ class _SyncPageState extends State<SyncPage> {
   /// 保存配置。
   ///
   /// 配置发生变化（首次填写 / 换设备）时安排一次同步：新设备接入时
-  /// 先把云端已有的关注、标签、固定分类、屏蔽词合并进来，再向下推进。
+  /// 先把云端已有的关注、固定分类、屏蔽词合并进来，再向下推进。
   Future<void> _saveConfig({bool scheduleSync = true}) async {
     var changed = await BackupClient.instance.saveConfig(
       uri: _uriCtr.text,
@@ -214,7 +214,7 @@ class _SyncPageState extends State<SyncPage> {
           AlertDialog(
             title: const Text("导入备份"),
             content: const Text(
-              "将合并导入备份中的关注、关注标签、固定分类与屏蔽词"
+              "将合并导入备份中的关注、固定分类与屏蔽词"
               "（不会删除本地已有条目），设置与账号按备份覆盖。"
               "播放历史不会被导入。",
             ),
@@ -316,7 +316,7 @@ class _SyncPageState extends State<SyncPage> {
             title: const Text("恢复备份"),
             content: Text(
               "将用「$name」中的设置、账号更新当前数据；"
-              "其中本地关注、关注标签、主页固定分类、弹幕屏蔽词为合并导入"
+              "其中本地关注、主页固定分类、弹幕屏蔽词为合并导入"
               "（不会删除现有条目）。此操作不可撤销。",
             ),
             actions: [
@@ -498,7 +498,7 @@ class _SyncPageState extends State<SyncPage> {
               contentPadding: const EdgeInsets.symmetric(horizontal: 16),
               title: const Text("自动备份"),
               subtitle: const Text(
-                "设置变更或本地关注 / 关注标签 / 弹幕屏蔽词 / 固定的分类 变化后自动备份",
+                "设置变更或本地关注 / 弹幕屏蔽词 / 固定的分类 变化后自动备份",
               ),
               value: _autoBackup,
               onChanged: (value) async {
@@ -515,7 +515,7 @@ class _SyncPageState extends State<SyncPage> {
               contentPadding: const EdgeInsets.symmetric(horizontal: 16),
               title: const Text("自动同步"),
               subtitle: const Text(
-                "在设备间同步本地关注 / 关注标签 / 固定的分类 / 弹幕屏蔽词",
+                "在设备间同步本地关注 / 固定的分类 / 弹幕屏蔽词",
               ),
               value: _autoSync,
               onChanged: (value) async {

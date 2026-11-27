@@ -15,7 +15,6 @@ import 'package:simple_live_app/app/log.dart';
 import 'package:simple_live_app/app/sites.dart';
 import 'package:simple_live_app/app/utils.dart';
 import 'package:simple_live_app/models/db/follow_user.dart';
-import 'package:simple_live_app/models/db/follow_user_tag.dart';
 import 'package:simple_live_app/services/db_service.dart';
 
 class FollowService extends GetxService {
@@ -34,12 +33,6 @@ class FollowService extends GetxService {
   /// 未直播的用户列表
   RxList<FollowUser> notLiveList = RxList<FollowUser>();
 
-  /// 用户自定义的tag
-  RxList<FollowUserTag> followTagList = RxList<FollowUserTag>();
-
-  /// 当前tag的用户列表
-  RxList<FollowUser> curTagFollowList = RxList<FollowUser>();
-
   /// 已经更新状态的数量
   var updatedCount = 0;
 
@@ -55,64 +48,6 @@ class FollowService extends GetxService {
     });
     initTimer();
     super.onInit();
-  }
-
-  // 添加标签
-  Future<void> addFollowUserTag(String tag) async {
-    // 判断待添加tag是否已存在，存在则return
-    if (followTagList.any((item) => item.tag == tag)) {
-      SmartDialog.showToast("标签名重复，修改失败");
-      return;
-    }
-    FollowUserTag item = await DBService.instance.addFollowTag(tag);
-    followTagList.add(item);
-  }
-
-  // 删除标签
-  Future<void> delFollowUserTag(FollowUserTag tag) async {
-    followTagList.remove(tag);
-    await DBService.instance.deleteFollowTag(tag.id);
-  }
-
-  // 获取用户自定义标签列表
-  void getAllTagList() {
-    var list = DBService.instance.getFollowTagList();
-    followTagList.assignAll(list);
-  }
-
-  // 修改标签
-  void updateFollowUserTag(FollowUserTag tag) {
-    DBService.instance.updateFollowTag(tag);
-    // 查找并修改
-    var index = followTagList.indexWhere((oTag) => oTag.id == tag.id);
-    followTagList[index] = tag;
-  }
-
-  // 根据标签筛选数据
-  void filterDataByTag(FollowUserTag tag) {
-    curTagFollowList.clear();
-    // 用一个新的列表来存储需要删除的 userId
-    List<String> toRemove = [];
-    for (var id in tag.userId) {
-      if (followList.any((x) => x.id == id)) {
-        // 找到对应的 followUser 添加到 curTagFollowList
-        curTagFollowList.add(followList.firstWhere((x) => x.id == id));
-      } else {
-        // 标记要删除的 id
-        toRemove.add(id);
-      }
-    }
-    // 双向确认用户取消关注后标签内是否还有该用户
-    // 在遍历结束后统一移除不在 followList 中的 id
-    tag.userId.removeWhere((id) => toRemove.contains(id));
-    // 更新数据库
-    if (toRemove.isNotEmpty) {
-      DBService.instance.updateFollowTag(tag);
-    }
-    // 标签内排序
-    curTagFollowList.sort(
-      (a, b) => b.liveStatus.value.compareTo(a.liveStatus.value),
-    );
   }
 
   // 添加关注
@@ -140,7 +75,6 @@ class FollowService extends GetxService {
 
   Future<void> loadData({bool updateStatus = true}) async {
     var list = DBService.instance.getFollowList();
-    getAllTagList();
     if (list.isEmpty) {
       updating.value = false;
       followList.assignAll(list);
@@ -412,7 +346,6 @@ class FollowService extends GetxService {
             "userName": item.userName,
             "face": item.face,
             "addTime": item.addTime.toString(),
-            "tag": item.tag,
           },
         )
         .toList();
@@ -424,14 +357,6 @@ class FollowService extends GetxService {
 
     for (var item in data) {
       var follow = FollowUser.fromJson(item);
-      // 导入关注列表同时导入标签列表 此方法可优化为所有导入逻辑
-      if (follow.tag != "全部") {
-        // logic: 尝试添加，存在则返回已存在的对象
-        var tag = await DBService.instance.addFollowTag(follow.tag);
-        // 更新tag
-        tag.userId.addIf(!tag.userId.contains(follow.id), follow.id);
-        await DBService.instance.updateFollowTag(tag);
-      }
       await DBService.instance.addFollow(follow);
     }
   }

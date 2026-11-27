@@ -12,13 +12,11 @@ class FollowUserItem extends StatelessWidget {
   final FollowUser item;
   final Function()? onRemove;
   final Function()? onTap;
-  final Function()? onLongPress;
   final bool playing;
   const FollowUserItem({
     required this.item,
     this.onRemove,
     this.onTap,
-    this.onLongPress,
     this.playing = false,
     Key? key,
   }) : super(key: key);
@@ -134,7 +132,6 @@ class FollowUserItem extends StatelessWidget {
                   icon: const Icon(Remix.dislike_line),
                 )),
       onTap: onTap,
-      onLongPress: onLongPress,
     );
   }
 

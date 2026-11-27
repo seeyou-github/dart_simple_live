@@ -17,7 +17,6 @@ import 'package:simple_live_app/app/utils.dart';
 import 'package:simple_live_app/app/utils/archive.dart';
 import 'package:simple_live_app/app/utils/document.dart';
 import 'package:simple_live_app/models/db/follow_user.dart';
-import 'package:simple_live_app/models/db/follow_user_tag.dart';
 import 'package:simple_live_app/modules/sync/remote_sync/webdav/webdav_client.dart';
 import 'package:simple_live_app/services/bilibili_account_service.dart';
 import 'package:simple_live_app/services/db_service.dart';
@@ -40,7 +39,6 @@ class RemoteSyncWebDAVController extends BaseController {
   final _userBlockedWordJsonName = 'SimpleLive_blocked_word.json';
   final _userBilibiliAccountJsonName = 'SimpleLive_bilibili_account.json';
   final _userSettingsJsonName = 'SimpleLive_Settings.json';
-  final _userTagsJsonName = 'SimpleLive_Tags.json';
 
   @override
   void onInit() {
@@ -190,12 +188,6 @@ class RemoteSyncWebDAVController extends BaseController {
       };
       final userFollowJsonFile = File(join(profile.path, _userFollowJsonName));
       await userFollowJsonFile.writeAsString(jsonEncode(dataFollowsMap));
-      // 用户自定义标签
-      var userTagsList = DBService.instance.getFollowTagList();
-      var dataTagsMap = {'data': userTagsList.map((e) => e.toJson()).toList()};
-      var userTagsJsonFile = File(join(profile.path, _userTagsJsonName));
-      await userTagsJsonFile.writeAsString(jsonEncode(dataTagsMap));
-
       // blocked_word
       var userShieldList = AppSettingsController.instance.shieldList;
       var dataShieldListMap = {'data': userShieldList.toList()};
@@ -304,23 +296,6 @@ class RemoteSyncWebDAVController extends BaseController {
           Log.i('已同步用户设置');
         } catch (e) {
           Log.e("同步用户设置失败：$e", StackTrace.current);
-        }
-      } else if (file.name == _userTagsJsonName && isSyncFollows.value) {
-        try {
-          // 标签功能和关注具有依赖关系，必须同时同步
-          // 清空本地标签列表
-          await DBService.instance.tagBox.clear();
-          for (var item in jsonData) {
-            var tag = FollowUserTag.fromJson(item);
-            await DBService.instance.tagBox.put(tag.id, tag);
-            // 插入之后验证
-            var insertedTag = DBService.instance.tagBox.get(tag.id);
-            Log.i('Inserted tag: ${insertedTag?.tag}');
-          }
-          EventBus.instance.emit(Constant.kUpdateFollow, 0);
-          Log.i('已同步用户自定义标签');
-        } catch (e) {
-          Log.e('同步用户自定义标签失败:$e', StackTrace.current);
         }
       } else {
         return;

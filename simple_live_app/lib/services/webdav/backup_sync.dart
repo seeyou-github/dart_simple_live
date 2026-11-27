@@ -11,7 +11,6 @@ import 'package:simple_live_app/app/controller/app_settings_controller.dart';
 import 'package:simple_live_app/app/event_bus.dart';
 import 'package:simple_live_app/app/log.dart';
 import 'package:simple_live_app/models/db/follow_user.dart';
-import 'package:simple_live_app/models/db/follow_user_tag.dart';
 import 'package:simple_live_app/services/db_service.dart';
 import 'package:simple_live_app/services/local_storage_service.dart';
 import 'package:simple_live_app/services/webdav/backup_archive.dart';
@@ -86,20 +85,17 @@ class _Record {
   }
 }
 
-/// 同步快照：关注 / 标签 / 固定分类 / 屏蔽词
+/// 同步快照：关注 / 固定分类 / 屏蔽词
 class _SyncState {
   _SyncState({
     Map<String, _Record>? follows,
-    Map<String, _Record>? tags,
     Map<String, _Record>? categories,
     Map<String, _Record>? blockWords,
   })  : follows = follows ?? {},
-        tags = tags ?? {},
         categories = categories ?? {},
         blockWords = blockWords ?? {};
 
   final Map<String, _Record> follows;
-  final Map<String, _Record> tags;
   final Map<String, _Record> categories;
   final Map<String, _Record> blockWords;
 
@@ -129,7 +125,6 @@ class _SyncState {
     }
     return _SyncState(
       follows: _decodeMap(json["follows"]),
-      tags: _decodeMap(json["tags"]),
       categories: _decodeMap(json["categories"]),
       blockWords: _decodeMap(json["blockWords"]),
     );
@@ -192,25 +187,6 @@ class _SyncState {
       }
     }
     _carryTombstones(state.follows, baseline?.follows, follows.keys, now);
-
-    // 本地关注标签
-    var tags = {
-      for (var item in DBService.instance.tagBox.values) item.id: item,
-    };
-    for (var entry in tags.entries) {
-      var map = entry.value.toJson();
-      var base =
-          baseline?.tags[entry.key] ?? _seedRecord(seed?.tags[entry.key]);
-      if (base != null && !base.deleted && mapEquals(base.data, map)) {
-        state.tags[entry.key] = base;
-      } else {
-        state.tags[entry.key] = _Record(
-          updatedAt: restoreBasis ?? now,
-          data: map,
-        );
-      }
-    }
-    _carryTombstones(state.tags, baseline?.tags, tags.keys, now);
 
     // 主页分类栏固定分类（按 站点|父分类|分类 逐项记录）
     var categories = _readPinned();
@@ -281,7 +257,6 @@ class _SyncState {
     }
     return _SyncState(
       follows: _mergeMap(local.follows, remote.follows),
-      tags: _mergeMap(local.tags, remote.tags),
       categories: _mergeMap(local.categories, remote.categories),
       blockWords: _mergeMap(local.blockWords, remote.blockWords),
     );
@@ -303,7 +278,6 @@ class _SyncState {
 
   void prune(int cutoff) {
     _pruneMap(follows, cutoff);
-    _pruneMap(tags, cutoff);
     _pruneMap(categories, cutoff);
     _pruneMap(blockWords, cutoff);
   }
@@ -314,7 +288,6 @@ class _SyncState {
 
   bool sameAs(_SyncState other) =>
       _sameMap(follows, other.follows) &&
-      _sameMap(tags, other.tags) &&
       _sameMap(categories, other.categories) &&
       _sameMap(blockWords, other.blockWords);
 
@@ -354,29 +327,6 @@ class _SyncState {
       }
       try {
         await db.followBox.put(entry.key, FollowUser.fromJson(data));
-      } catch (e) {
-        Log.logPrint(e);
-      }
-    }
-
-    for (var entry in tags.entries) {
-      var record = entry.value;
-      var current = db.tagBox.get(entry.key);
-      if (record.deleted) {
-        if (current != null) {
-          await db.tagBox.delete(entry.key);
-        }
-        continue;
-      }
-      var data = record.data;
-      if (data == null) {
-        continue;
-      }
-      if (current != null && mapEquals(current.toJson(), data)) {
-        continue;
-      }
-      try {
-        await db.tagBox.put(entry.key, FollowUserTag.fromJson(data));
       } catch (e) {
         Log.logPrint(e);
       }
@@ -488,7 +438,6 @@ class _SyncState {
         "version": _syncFileVersion,
         "savedAt": DateTime.now().millisecondsSinceEpoch,
         "follows": _encodeMap(follows),
-        "tags": _encodeMap(tags),
         "categories": _encodeMap(categories),
         "blockWords": _encodeMap(blockWords),
       });
@@ -509,7 +458,7 @@ class _SyncState {
 
 /// 跨设备数据同步
 ///
-/// 同步本地关注 / 关注标签 / 主页固定分类 / 弹幕屏蔽词到
+/// 同步本地关注 / 主页固定分类 / 弹幕屏蔽词到
 /// `<WebDAV 地址>/simple_live_app/Sync_SimpleLive.json`，全平台共用一份。
 /// 按条目合并：修改时间较新者生效，删除以墓碑记录传播。
 class BackupSync {
@@ -741,9 +690,6 @@ class BackupScheduler {
       );
       _subs.add(
         DBService.instance.followBox.watch().listen((_) => _onLocalChanged()),
-      );
-      _subs.add(
-        DBService.instance.tagBox.watch().listen((_) => _onLocalChanged()),
       );
       _subs.add(
         storage.shieldBox.watch().listen((_) => _onLocalChanged()),
