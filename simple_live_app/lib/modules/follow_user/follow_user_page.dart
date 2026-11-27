@@ -74,28 +74,6 @@ class FollowUserPage extends GetView<FollowUserController> {
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Icon(Remix.text),
-                      AppStyle.hGap12,
-                      Text("导出文本"),
-                    ],
-                  ),
-                ),
-                PopupMenuItem(
-                  value: 3,
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(Remix.file_text_line),
-                      AppStyle.hGap12,
-                      Text("导入文本"),
-                    ],
-                  ),
-                ),
-                PopupMenuItem(
-                  value: 4,
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
                       Icon(Remix.price_tag_line),
                       AppStyle.hGap12,
                       Text("标签管理"),
@@ -110,10 +88,6 @@ class FollowUserPage extends GetView<FollowUserController> {
               } else if (value == 1) {
                 FollowService.instance.inputFile();
               } else if (value == 2) {
-                FollowService.instance.exportText();
-              } else if (value == 3) {
-                FollowService.instance.inputText();
-              } else if (value == 4) {
                 showTagsManager();
               }
             },

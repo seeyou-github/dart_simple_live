@@ -2,13 +2,12 @@ import 'dart:async';
 import 'dart:collection';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
 import 'package:get/get.dart';
-import 'package:path_provider/path_provider.dart';
-import 'package:simple_live_app/app/app_dirs.dart';
 import 'package:simple_live_app/app/constant.dart';
 import 'package:simple_live_app/app/controller/app_settings_controller.dart';
 import 'package:simple_live_app/app/event_bus.dart';
@@ -258,6 +257,9 @@ class FollowService extends GetxService {
     _updatedListController.add(0);
   }
 
+  /// 导出关注列表：弹出系统「另存为」对话框，由用户选择保存位置
+  ///
+  /// Android / iOS 走 SAF，保存时需要直接带上文件内容；桌面端拿到路径后自行写入。
   void exportFile() async {
     if (followList.isEmpty) {
       SmartDialog.showToast("列表为空");
@@ -265,29 +267,23 @@ class FollowService extends GetxService {
     }
 
     try {
-      var status = await Utils.checkStorgePermission();
-      if (!status) {
-        SmartDialog.showToast("无权限");
-        return;
-      }
-
-      var dir = "";
-      if (Platform.isWindows) {
-        dir = (await AppDirs.appDataSubdirectory('exports')).path;
-      } else if (Platform.isIOS) {
-        dir = (await getApplicationDocumentsDirectory()).path;
-      } else {
-        dir = await FilePicker.platform.getDirectoryPath() ?? "";
-      }
-
-      if (dir.isEmpty) {
-        return;
-      }
-      var jsonFile = File(
-        '$dir/SimpleLive_${DateTime.now().millisecondsSinceEpoch ~/ 1000}.json',
+      var bytes = Uint8List.fromList(utf8.encode(generateJson()));
+      var fileName =
+          "SimpleLive_follow_${DateTime.now().millisecondsSinceEpoch ~/ 1000}.json";
+      var inlineSave = Platform.isAndroid || Platform.isIOS;
+      var path = await FilePicker.platform.saveFile(
+        dialogTitle: "保存关注列表",
+        fileName: fileName,
+        type: FileType.custom,
+        allowedExtensions: ["json"],
+        bytes: inlineSave ? bytes : null,
       );
-      var jsonText = generateJson();
-      await jsonFile.writeAsString(jsonText);
+      if (path == null) {
+        return;
+      }
+      if (!inlineSave) {
+        await File(path).writeAsBytes(bytes);
+      }
       SmartDialog.showToast("已导出关注列表");
     } catch (e) {
       Log.logPrint(e);
