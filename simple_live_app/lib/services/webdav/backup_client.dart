@@ -44,29 +44,36 @@ String describeBackupError(Object error) {
     return "${error.message}（HTTP $code）";
   }
   if (error is dio.DioException) {
-    switch (error.type) {
-      case dio.DioExceptionType.connectionTimeout:
-        return "网络超时：连接服务器超时，请检查网络或地址";
-      case dio.DioExceptionType.sendTimeout:
-        return "网络超时：上传超时，请检查网络";
-      case dio.DioExceptionType.receiveTimeout:
-        // 注意：dio 5.11 才新增 transformTimeout，低版本没有这个枚举值，
-        // 这里不要引用它，否则解析到 dio 5.9 时会编译失败
-        return "网络超时：服务器响应过慢，请稍后重试";
-      case dio.DioExceptionType.badCertificate:
-        return "证书错误：HTTPS 证书校验失败";
-      case dio.DioExceptionType.connectionError:
-        return "网络错误：无法访问服务器${_causeOf(error)}";
-      case dio.DioExceptionType.cancel:
-        return "请求已取消";
-      case dio.DioExceptionType.badResponse:
-        var code = error.response?.statusCode;
-        var message = error.response?.statusMessage;
-        return "服务器返回错误：HTTP ${code ?? '未知'}"
-            "${message == null || message.isEmpty ? '' : ' $message'}";
-      case dio.DioExceptionType.unknown:
-        return "网络异常${_causeOf(error)}";
+    // 用 if 而不是 switch：DioExceptionType 在不同 dio 版本里枚举值数量不同
+    // （例如 dio 5.11 才新增 transformTimeout）。switch 要求穷尽枚举，
+    // 引用新值会在旧版本编译失败，不引用又会在新版本编译失败。
+    var type = error.type;
+    if (type == dio.DioExceptionType.connectionTimeout) {
+      return "网络超时：连接服务器超时，请检查网络或地址";
     }
+    if (type == dio.DioExceptionType.sendTimeout) {
+      return "网络超时：上传超时，请检查网络";
+    }
+    if (type == dio.DioExceptionType.receiveTimeout) {
+      return "网络超时：服务器响应过慢，请稍后重试";
+    }
+    if (type == dio.DioExceptionType.badCertificate) {
+      return "证书错误：HTTPS 证书校验失败";
+    }
+    if (type == dio.DioExceptionType.connectionError) {
+      return "网络错误：无法访问服务器${_causeOf(error)}";
+    }
+    if (type == dio.DioExceptionType.cancel) {
+      return "请求已取消";
+    }
+    if (type == dio.DioExceptionType.badResponse) {
+      var code = error.response?.statusCode;
+      var message = error.response?.statusMessage;
+      return "服务器返回错误：HTTP ${code ?? '未知'}"
+          "${message == null || message.isEmpty ? '' : ' $message'}";
+    }
+    // 其余类型（unknown，以及新版本新增的超时类型）统一归到网络异常
+    return "网络异常${_causeOf(error)}";
   }
   var text = "$error";
   return text.length > 200 ? "${text.substring(0, 200)}…" : text;
