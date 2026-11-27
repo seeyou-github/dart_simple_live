@@ -332,8 +332,7 @@ Widget buildFullControls(
                   Offstage(
                     offstage: controller.showDanmakuState.value,
                     child: IconButton(
-                      onPressed: () => controller.showDanmakuState.value =
-                          !controller.showDanmakuState.value,
+                      onPressed: controller.toggleDanmaku,
                       icon: const ImageIcon(
                         AssetImage('assets/icons/icon_danmaku_open.png'),
                         size: 24,
@@ -344,8 +343,7 @@ Widget buildFullControls(
                   Offstage(
                     offstage: !controller.showDanmakuState.value,
                     child: IconButton(
-                      onPressed: () => controller.showDanmakuState.value =
-                          !controller.showDanmakuState.value,
+                      onPressed: controller.toggleDanmaku,
                       icon: const ImageIcon(
                         AssetImage('assets/icons/icon_danmaku_close.png'),
                         size: 24,
@@ -602,8 +600,7 @@ Widget buildControls(
                 Offstage(
                   offstage: controller.showDanmakuState.value,
                   child: IconButton(
-                    onPressed: () => controller.showDanmakuState.value =
-                        !controller.showDanmakuState.value,
+                    onPressed: controller.toggleDanmaku,
                     icon: const ImageIcon(
                       AssetImage('assets/icons/icon_danmaku_open.png'),
                       size: 24,
@@ -614,8 +611,7 @@ Widget buildControls(
                 Offstage(
                   offstage: !controller.showDanmakuState.value,
                   child: IconButton(
-                    onPressed: () => controller.showDanmakuState.value =
-                        !controller.showDanmakuState.value,
+                    onPressed: controller.toggleDanmaku,
                     icon: const ImageIcon(
                       AssetImage('assets/icons/icon_danmaku_close.png'),
                       size: 24,

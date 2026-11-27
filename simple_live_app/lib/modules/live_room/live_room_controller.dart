@@ -125,6 +125,10 @@ class LiveRoomController extends PlayerController
     }
     initAutoExit();
     showDanmakuState.value = AppSettingsController.instance.danmuEnable.value;
+    // 弹幕开关是全局设置，设置页/其他播放页修改后同步当前播放页
+    ever(AppSettingsController.instance.danmuEnable, (bool value) {
+      showDanmakuState.value = value;
+    });
     followed.value = DBService.instance.getFollowExist("${site.id}_$roomId");
     loadData();
 
