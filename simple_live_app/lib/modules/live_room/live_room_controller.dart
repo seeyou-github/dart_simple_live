@@ -128,7 +128,8 @@ class LiveRoomController extends PlayerController
     }
     initAutoExit();
     showDanmakuState.value = AppSettingsController.instance.danmuEnable.value;
-    // 弹幕开关是全局设置，设置页/其他播放页修改后同步当前播放页
+    // 播放器底栏的弹幕开关是会话级临时开关，不写入设置；
+    // 设置页修改「默认开关」后仍同步到当前播放页
     ever(AppSettingsController.instance.danmuEnable, (bool value) {
       showDanmakuState.value = value;
     });

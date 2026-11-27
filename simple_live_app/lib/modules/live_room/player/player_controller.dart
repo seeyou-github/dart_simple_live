@@ -87,14 +87,13 @@ mixin PlayerStateMixin on PlayerMixin {
   /// 是否显示弹幕
   RxBool showDanmakuState = false.obs;
 
-  /// 切换弹幕显示
+  /// 切换弹幕显示（仅当前播放会话有效的临时开关）
   ///
-  /// 播放器控制条的弹幕开关为全局设置，切换时会同步写入
-  /// 「设置 - 弹幕设置 - 默认开关」。
+  /// 播放器控制条的弹幕开关不写入「设置 - 弹幕设置 - 默认开关」，
+  /// 退出播放页 / 关闭软件后即失效；每次打开播放页时
+  /// 仍以默认开关作为初始状态（见 LiveRoomController.onInit）。
   void toggleDanmaku() {
-    final settings = AppSettingsController.instance;
-    settings.setDanmuEnable(!settings.danmuEnable.value);
-    showDanmakuState.value = settings.danmuEnable.value;
+    showDanmakuState.value = !showDanmakuState.value;
   }
 
   /// 是否显示控制器
